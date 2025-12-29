@@ -1,9 +1,9 @@
-import 'dart:convert'; // ✅ Added for JSON parsing
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:amplify_flutter/amplify_flutter.dart'; // ✅ Added AWS
-import 'package:amplify_api/amplify_api.dart'; // ✅ Added AWS API
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_api/amplify_api.dart';
 
 // --- Models ---
 
@@ -39,26 +39,27 @@ class TalkToCounsellorScreen extends StatefulWidget {
 }
 
 class _TalkToCounsellorScreenState extends State<TalkToCounsellorScreen> {
-  // ✅ STATE VARIABLES FOR REAL DATA
+  // State Variables
   List<Counsellor> _counsellors = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchCounsellors(); // ✅ Trigger fetch on load
+    _fetchCounsellors();
   }
 
-  // ✅ 1. FETCH COUNSELORS FROM AWS DYNAMODB
+  // ✅ FIXED FETCH FUNCTION
   Future<void> _fetchCounsellors() async {
     try {
-      // Query: Give me all users where role == "COUNSELOR"
+      // 1. Updated Query (Removed 'details' which caused the crash)
       const graphQLDocument = '''query ListCounselors {
         listUserProfiles(filter: { role: { eq: "COUNSELOR" } }) {
           items {
             id
             name
-            details 
+            imageUrl
+            # You can add phoneNumber here if needed
           }
         }
       }''';
@@ -66,31 +67,43 @@ class _TalkToCounsellorScreenState extends State<TalkToCounsellorScreen> {
       final request = GraphQLRequest<String>(document: graphQLDocument);
       final response = await Amplify.API.query(request: request).response;
 
+      // 2. Safety Check: Handle Errors gracefully
+      if (response.hasErrors) {
+        safePrint("GraphQL Errors: ${response.errors}");
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
       if (response.data != null) {
         final Map<String, dynamic> data = jsonDecode(response.data!);
         final List items = data['listUserProfiles']['items'];
 
-        setState(() {
-          _counsellors = items.map((item) {
-            // We parse "details" if it exists, or use defaults
-            // (Since your schema might be simple, we use defaults for now)
-            return Counsellor(
-              id: item['id'],
-              name: item['name'] ?? "Unknown Expert",
-              specialization: "General Therapy", // You can store this in 'details' JSON later
-              experience: "5+ Years",
-              rating: 4.8,
-              isAvailableNow: true,
-              languages: ['English', 'Hindi'],
-              imageUrl: 'assets/images/doc1.png', // Placeholder image
-            );
-          }).toList();
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _counsellors = items.map((item) {
+              return Counsellor(
+                id: item['id'],
+                name: item['name'] ?? "Unknown Expert",
+                // Mocking these for now as they aren't in UserProfile
+                // To fix this permanently, you should fetch from 'CounselorProfile' table
+                specialization: "General Therapy",
+                experience: "5+ Years",
+                rating: 4.8,
+                isAvailableNow: true,
+                languages: ['English', 'Hindi'],
+                imageUrl: item['imageUrl'] ?? 'assets/images/doc1.png',
+              );
+            }).toList();
+            _isLoading = false;
+          });
+        }
+      } else {
+        // Data is null but no errors? Stop loading anyway.
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       safePrint("Error fetching counselors: $e");
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -133,7 +146,9 @@ class _TalkToCounsellorScreenState extends State<TalkToCounsellorScreen> {
         iconTheme: const IconThemeData(color: Colors.black87),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator()) // ✅ Loading Spinner
+          ? const Center(child: CircularProgressIndicator())
+          : _counsellors.isEmpty
+          ? const Center(child: Text("No counselors found."))
           : SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -165,21 +180,18 @@ class _TalkToCounsellorScreenState extends State<TalkToCounsellorScreen> {
             const SizedBox(height: 12),
 
             // 3. Counsellor List (REAL DATA)
-            if (_counsellors.isEmpty)
-              const Center(child: Text("No counselors found."))
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _counsellors.length,
-                itemBuilder: (context, index) {
-                  return CounsellorCard(
-                    counsellor: _counsellors[index],
-                    onBookTap: () => _showBookingSheet(
-                        context, _counsellors[index]),
-                  );
-                },
-              ),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _counsellors.length,
+              itemBuilder: (context, index) {
+                return CounsellorCard(
+                  counsellor: _counsellors[index],
+                  onBookTap: () => _showBookingSheet(
+                      context, _counsellors[index]),
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -386,7 +398,7 @@ class BookingBottomSheet extends StatefulWidget {
 class _BookingBottomSheetState extends State<BookingBottomSheet> {
   int selectedDateIndex = 0;
   int selectedSlotIndex = -1;
-  bool _isBooking = false; // ✅ Loading state for booking button
+  bool _isBooking = false;
 
   final List<String> timeSlots = [
     '10:00 AM',
@@ -395,32 +407,43 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
     '04:30 PM',
   ];
 
-  // ✅ 2. REAL BOOKING MUTATION
+  // ✅ REAL BOOKING MUTATION
   Future<void> _confirmBooking() async {
     setState(() => _isBooking = true);
 
-    // Format a proper AWS Date Time if needed, or send as string
+    // Get current user ID logic would go here ideally
+    // For now we rely on the backend seeing the 'owner' in the Auth token
+
     final dateStr = DateTime.now().add(Duration(days: selectedDateIndex)).toString();
     final timeStr = timeSlots[selectedSlotIndex];
 
     try {
-      const graphQLDocument = '''mutation CreateAppt(\$cid: String, \$cname: String, \$note: String) {
+      // Note: Your Appointment schema expects 'date' as AWSDate (YYYY-MM-DD)
+      // and 'studentID' and 'counselorID'.
+      // We will assume the backend handles studentID via auth or we fetch it.
+      // For this simplified version, we just send basic data.
+
+      const graphQLDocument = '''mutation CreateAppt(\$cid: ID!, \$time: String!, \$date: AWSDate!) {
         createAppointment(input: { 
-          counsellorId: \$cid, 
-          counsellorName: \$cname,
-          status: "PENDING", 
-          note: \$note 
+          counselorID: \$cid, 
+          timeSlot: \$time,
+          date: \$date,
+          status: PENDING 
         }) {
           id
         }
       }''';
 
+      // Format Date properly for AWSDate
+      final dateObj = DateTime.now().add(Duration(days: selectedDateIndex));
+      final awsDate = DateFormat('yyyy-MM-dd').format(dateObj);
+
       final request = GraphQLRequest<String>(
         document: graphQLDocument,
         variables: {
           "cid": widget.counsellor.id,
-          "cname": widget.counsellor.name,
-          "note": "Requested slot: $dateStr at $timeStr",
+          "time": timeStr,
+          "date": awsDate,
         },
       );
 
@@ -572,7 +595,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: (selectedSlotIndex != -1 && !_isBooking)
-                  ? _confirmBooking // ✅ Call the AWS function
+                  ? _confirmBooking
                   : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.teal,
