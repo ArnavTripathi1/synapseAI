@@ -1,0 +1,23 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-synapse-dev-95f4c-authRole",
+      "UnauthRoleArn": "arn:aws:iam::338394181738:role/amplify-synapse-dev-95f4c-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::338394181738:role/amplify-synapse-dev-95f4c-authRole",
+      "Region": "ap-south-1",
+      "DeploymentBucketName": "amplify-synapse-dev-95f4c-deployment",
+      "UnauthRoleName": "amplify-synapse-dev-95f4c-unauthRole",
+      "StackName": "amplify-synapse-dev-95f4c",
+      "StackId": "arn:aws:cloudformation:ap-south-1:338394181738:stack/amplify-synapse-dev-95f4c/c7901220-e480-11f0-bd8b-022d4160c555",
+      "AmplifyAppId": "d31vke0rnwlpm5"
+    },
+    "categories": {
+      "auth": {
+        "synapseb55a94f8": {}
+      },
+      "api": {
+        "synapse": {}
+      }
+    }
+  }
+}

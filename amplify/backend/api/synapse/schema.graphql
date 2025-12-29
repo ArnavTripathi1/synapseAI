@@ -1,0 +1,14 @@
+enum UserRole {
+  STUDENT
+  COUNSELOR
+}
+
+type UserProfile
+@model
+@auth(rules: [{ allow: owner }]) {
+  id: ID!
+  name: String!
+  role: UserRole!
+  age: Int
+  hobby: String
+}
