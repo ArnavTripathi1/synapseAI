@@ -4,9 +4,9 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:amplify_api/amplify_api.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:amplify_authenticator/amplify_authenticator.dart';
-import 'amplify_outputs.dart';
+import 'amplifyconfiguration.dart';
 import 'core/theme/app_theme.dart';
-import 'features/home/main_screen.dart';
+import 'features/student/home/main_screen.dart';
 
 // 2. Turn on the AWS Engine
 Future<void> main() async {
@@ -26,7 +26,7 @@ Future<void> _configureAmplify() async {
     await Amplify.addPlugin(AmplifyAuthCognito());
     await Amplify.addPlugin(AmplifyAPI());
 
-    await Amplify.configure(amplifyConfig);
+    await Amplify.configure(amplifyconfig);
     safePrint("Amplify configured");
   }
 }

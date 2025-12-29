@@ -12,7 +12,7 @@ import 'package:amplify_authenticator/amplify_authenticator.dart'; // Needed for
 
 // 2. Screen Imports
 import '../../counselling/screens/talk_to_counsellor.dart';
-import '../../auth/role_selection_screen.dart';
+import '../../../auth/role_selection_screen.dart';
 import 'CounselorHomeScreen.dart'; // Ensure this file exists
 
 class DashboardScreen extends StatefulWidget {

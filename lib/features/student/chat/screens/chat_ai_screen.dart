@@ -6,14 +6,14 @@ import 'package:google_fonts/google_fonts.dart';
 import '../widgets/chat_background.dart';
 import '../widgets/empathy_avatar.dart';
 
-class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+class ChatAIScreen extends StatefulWidget {
+  const ChatAIScreen({super.key});
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  State<ChatAIScreen> createState() => _ChatAIScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatAIScreenState extends State<ChatAIScreen> {
   final TextEditingController _controller = TextEditingController();
   final List<String> _messages = []; // Empty initially to show the "Greeting"
 

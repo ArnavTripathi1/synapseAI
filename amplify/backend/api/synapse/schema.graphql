@@ -1,14 +1,191 @@
+# 1. Enums
 enum UserRole {
   STUDENT
   COUNSELOR
 }
 
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  BLOCKED # Used when Counselor toggles a slot to "Unavailable"
+}
+
+enum ResourceType {
+  VIDEO
+  ARTICLE
+}
+
+# 2. Base User Profile (Authentication Hub)
 type UserProfile
 @model
-@auth(rules: [{ allow: owner }]) {
+@auth(rules: [
+  { allow: owner },
+  { allow: private, operations: [read] } # Allows search/lookup
+]) {
   id: ID!
   name: String!
   role: UserRole!
-  age: Int
-  hobby: String
+  imageUrl: String
+  phoneNumber: String # Shared contact field
+
+  # Navigation links to specific profiles
+  studentProfile: StudentProfile @hasOne
+  counselorProfile: CounselorProfile @hasOne
+
+  # Chat Relationship
+  chatRooms: [ChatRoomUser] @hasMany(indexName: "byUser", fields: ["id"])
+}
+
+# 3. Student Specific Data
+type StudentProfile
+@model
+@auth(rules: [
+  { allow: owner },
+  { allow: private, operations: [read] }
+]) {
+  id: ID!
+  userProfileID: ID!
+
+  # Academic Details (Visible in Session Details)
+  branch: String # e.g. "CSE"
+  year: String   # e.g. "2nd Year"
+
+  # Dashboard Stats
+  wellnessScore: Int
+  currentMood: String
+
+  # Relationships
+  moodLogs: [MoodLog] @hasMany(indexName: "byStudent", fields: ["id"])
+  appointments: [Appointment] @hasMany(indexName: "byStudent", fields: ["id"])
+}
+
+# 4. Counselor Specific Data
+type CounselorProfile
+@model
+@auth(rules: [
+  { allow: owner },
+  { allow: private, operations: [read] } # Students need to read this to book
+]) {
+  id: ID!
+  userProfileID: ID!
+
+  # Professional Details
+  specialization: String!
+  experienceYears: Int
+  rating: Float
+  aboutMe: String
+  languages: [String]
+
+  # New Fields from EditProfileScreen
+  licenseNumber: String
+  fee: Float # Hourly rate
+  isVerified: Boolean # For the green badge
+
+  # Dashboard Status (Online/Offline Toggle)
+  isOnline: Boolean
+
+  # Relationships
+  appointments: [Appointment] @hasMany(indexName: "byCounselor", fields: ["id"])
+}
+
+# 5. Appointments & Requests
+type Appointment
+@model
+@auth(rules: [
+  { allow: owner }, # Student (Creator) can Read/Update
+  # Counselor (Assigned) can Read/Update (Accept/Reject/Block)
+  { allow: owner, ownerField: "counselorID", operations: [read, update] }
+]) {
+  id: ID!
+
+  # Relationships
+  studentID: ID! @index(name: "byStudent", sortKeyFields: ["date"])
+  counselorID: ID! @index(name: "byCounselor", sortKeyFields: ["date"])
+
+  # Details
+  date: AWSDate!
+  timeSlot: String!      # "10:00 AM"
+  status: AppointmentStatus!
+  topic: String          # "Academic Stress", "Anxiety" (For SessionCard)
+
+  # Logistics
+  meetingLink: String    # For "Join Now" button
+  counselorNotes: String # Private notes for Counselor (EditSessionScreen)
+}
+
+# 6. Chat System
+type ChatRoom
+@model
+@auth(rules: [{ allow: private }]) {
+  id: ID!
+  # Many-to-Many connection
+  users: [ChatRoomUser] @hasMany(indexName: "byChatRoom", fields: ["id"])
+
+  # Messages
+  messages: [Message] @hasMany(indexName: "byChatRoom", fields: ["id"])
+
+  # For List View Performance (ChatsTab)
+  lastMessageContent: String
+  lastMessageTime: AWSDateTime
+}
+
+type ChatRoomUser
+@model
+@auth(rules: [{ allow: private }]) {
+  id: ID!
+  userID: ID! @index(name: "byUser")
+  chatRoomID: ID! @index(name: "byChatRoom")
+
+  user: UserProfile @belongsTo(fields: ["userID"])
+  chatRoom: ChatRoom @belongsTo(fields: ["chatRoomID"])
+
+  # Unread badge count for this specific user
+  unreadCount: Int
+}
+
+type Message
+@model
+@auth(rules: [{ allow: private }]) {
+  id: ID!
+  chatRoomID: ID! @index(name: "byChatRoom", sortKeyFields: ["createdAt"])
+  senderID: ID!
+  content: String!
+  createdAt: AWSDateTime!
+
+  # For Read Receipts (Blue ticks)
+  isRead: Boolean
+}
+
+# 7. Dashboard Charts (Moods)
+type MoodLog
+@model
+@auth(rules: [{ allow: owner }]) {
+  id: ID!
+  studentID: ID! @index(name: "byStudent", sortKeyFields: ["date"])
+  date: AWSDate!
+  score: Int!
+  moodLabel: String
+  sleepHours: Float
+  focusHours: Float
+}
+
+# 8. Resources (Articles/Videos)
+type Resource
+@model
+@auth(rules: [
+  { allow: private, operations: [read] },
+  { allow: groups, groups: ["Admin"], operations: [create, update, delete] }
+]) {
+  id: ID!
+  title: String!
+  type: ResourceType!
+  category: String!
+  duration: String
+  description: String
+  contentBody: String
+  url: String
+  thumbnailUrl: String
+  isFeatured: Boolean
 }

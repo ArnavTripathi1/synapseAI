@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import '../../core/theme/app_theme.dart';
-import '../chat/screens/chat_screen.dart';
+import '../../../core/theme/app_theme.dart';
+import '../chat/screens/chat_ai_screen.dart';
 import '../dashboard/screens/dashboard_screen.dart';
 import '../resources/screens/resources_screen.dart';
 class MainScreen extends StatefulWidget {
@@ -19,7 +19,7 @@ class _MainScreenState extends State<MainScreen> {
   // The 3 Main Views
   final List<Widget> _screens = [
     const DashboardScreen(), // Index 0: Home/Stats
-    const ChatScreen(),      // Index 1: The AI Copilot (Center)
+    const ChatAIScreen(),      // Index 1: The AI Copilot (Center)
     const ResourcesScreen(), // Index 2: Hub
   ];
 

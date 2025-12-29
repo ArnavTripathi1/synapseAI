@@ -3,8 +3,8 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:amplify_api/amplify_api.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../dashboard/screens/CounselorHomeScreen.dart';
-import '../home/main_screen.dart';
+import '../counsellor/home/main_screen.dart';
+import '../student/home/main_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -15,13 +15,25 @@ class RoleSelectionScreen extends StatefulWidget {
 
 class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   final _nameController = TextEditingController();
-  String? _selectedRole; // Used only for UI / routing
+
+  // Backend value: 'STUDENT' or 'COUNSELOR'
+  String? _selectedRole;
   bool _isSaving = false;
+
+  final Color _brandColor = const Color(0xFF3b5998);
+  final Color _accentColor = const Color(0xFF1E293B);
 
   Future<void> _saveProfile() async {
     if (_selectedRole == null || _nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter name and select a role")),
+        SnackBar(
+          content: Text(
+            "Please enter your name and select a role",
+            style: GoogleFonts.plusJakartaSans(),
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -44,13 +56,12 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
           'input': {
             'id': user.userId,
             'name': _nameController.text.trim(),
-            'role': _selectedRole, // STUDENT or COUNSELOR
+            'role': _selectedRole, // Expected: 'STUDENT' or 'COUNSELOR'
           }
         },
       );
 
-      final response =
-      await Amplify.API.mutate(request: request).response;
+      final response = await Amplify.API.mutate(request: request).response;
 
       if (response.errors.isNotEmpty) {
         throw Exception(response.errors.first.message);
@@ -62,7 +73,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     } catch (e) {
       safePrint("Profile creation error: $e");
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to save profile")),
+        SnackBar(content: Text("Failed to save profile: ${e.toString()}")),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -74,11 +85,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
 
     switch (role) {
       case 'COUNSELOR':
-        next = const CounselorHomeScreen();
+        next = const CounsellorMainScreen(); // Ensure this import is correct
         break;
       case 'STUDENT':
       default:
-        next = const MainScreen();
+        next = const MainScreen(); // Ensure this import is correct
     }
 
     Navigator.pushReplacement(
@@ -87,138 +98,240 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     );
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text(
-          "Welcome!",
-          style: GoogleFonts.plusJakartaSans(color: Colors.black),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Let's get you set up.",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "Tell us who you are to personalize your experience.",
-              style: GoogleFonts.plusJakartaSans(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 32),
-
-            TextField(
-              controller: _nameController,
-              decoration: InputDecoration(
-                labelText: "Your Name",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
+              // 1. Header Section
+              Text(
+                "Welcome to Synapse",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: _accentColor,
+                  letterSpacing: -0.5,
                 ),
               ),
-            ),
-
-            const SizedBox(height: 24),
-
-            Text(
-              "I am a...",
-              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: _buildRoleCard("Student", Icons.school_outlined),
+              const SizedBox(height: 8),
+              Text(
+                "Let's personalize your experience. Are you seeking help or offering guidance?",
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.grey[600],
+                  fontSize: 16,
+                  height: 1.5,
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildRoleCard(
-                    "Counselor",
-                    Icons.health_and_safety_outlined,
-                  ),
+              ),
+
+              const SizedBox(height: 40),
+
+              // 2. Name Input
+              Text(
+                "What should we call you?",
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w600,
+                  color: _accentColor,
+                  fontSize: 14,
                 ),
-              ],
-            ),
-
-            const Spacer(),
-
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: _isSaving ? null : _saveProfile,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E293B),
-                  shape: RoundedRectangleBorder(
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _nameController,
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: Colors.black87),
+                decoration: InputDecoration(
+                  hintText: "Enter your full name",
+                  hintStyle: GoogleFonts.plusJakartaSans(color: Colors.grey[400]),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                  border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
                   ),
-                ),
-                child: _isSaving
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(
-                  "Continue",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(color: _brandColor, width: 1.5),
                   ),
                 ),
               ),
-            ),
-          ],
+
+              const SizedBox(height: 32),
+
+              // 3. Role Selection
+              Text(
+                "I am a...",
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w600,
+                  color: _accentColor,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildRoleCard(
+                      label: "Student",
+                      backendValue: "STUDENT",
+                      icon: Icons.school_rounded,
+                      description: "I need support",
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildRoleCard(
+                      label: "Counselor",
+                      backendValue: "COUNSELOR",
+                      icon: Icons.health_and_safety_rounded,
+                      description: "I provide guidance",
+                    ),
+                  ),
+                ],
+              ),
+
+              const Spacer(),
+
+              // 4. Continue Button
+              SizedBox(
+                width: double.infinity,
+                height: 58,
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _saveProfile,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _brandColor,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    disabledBackgroundColor: _brandColor.withOpacity(0.6),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                  )
+                      : Text(
+                    "Continue",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildRoleCard(String label, IconData icon) {
-    final isSelected = _selectedRole == label;
+  Widget _buildRoleCard({
+    required String label,
+    required String backendValue,
+    required IconData icon,
+    required String description,
+  }) {
+    final isSelected = _selectedRole == backendValue;
 
     return GestureDetector(
       onTap: () {
         setState(() {
-          _selectedRole = label;
+          _selectedRole = backendValue;
         });
       },
-      child: Container(
-        height: 140,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        height: 160,
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue.withOpacity(0.05) : Colors.white,
+          color: isSelected ? _brandColor.withOpacity(0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? Colors.blue : Colors.grey.shade200,
-            width: isSelected ? 2 : 1,
+            color: isSelected ? _brandColor : Colors.grey.shade200,
+            width: isSelected ? 2 : 1.5,
           ),
-          borderRadius: BorderRadius.circular(16),
+          boxShadow: isSelected
+              ? [
+            BoxShadow(
+              color: _brandColor.withOpacity(0.15),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            )
+          ]
+              : [],
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
           children: [
-            Icon(
-              icon,
-              size: 32,
-              color: isSelected ? Colors.blue : Colors.grey,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              label,
-              style: GoogleFonts.plusJakartaSans(
-                fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.blue : Colors.black87,
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isSelected ? _brandColor.withOpacity(0.1) : Colors.grey[50],
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 32,
+                      color: isSelected ? _brandColor : Colors.grey[400],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    label,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: isSelected ? _brandColor : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: Colors.grey[500],
+                      height: 1.2,
+                    ),
+                  ),
+                ],
               ),
             ),
+
+            // Checkmark Badge
+            if (isSelected)
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: _brandColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    size: 14,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
           ],
         ),
       ),

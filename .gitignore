@@ -47,7 +47,6 @@ app.*.map.json
 
 #amplify-do-not-edit-begin
 amplify/\#current-cloud-backend
-lib/amplify_outputs.dart
 amplify/.config/local-*
 amplify/logs
 amplify/mock-data
