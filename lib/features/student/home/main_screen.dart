@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:synapse/features/student/chat/screens/chat_screen.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../chat/screens/chat_ai_screen.dart';
@@ -20,7 +20,8 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
     const DashboardScreen(), // Index 0: Home/Stats
     const ChatAIScreen(),      // Index 1: The AI Copilot (Center)
-    const ResourcesScreen(), // Index 2: Hub
+    const ChatsTab(),          // Index 2: Chat List
+    const ResourcesScreen(), // Index 3: Hub
   ];
 
   @override
@@ -44,6 +45,10 @@ class _MainScreenState extends State<MainScreen> {
           NavigationDestination(
             icon: FaIcon(FontAwesomeIcons.robot), // Robot icon for AI
             label: 'Synapse',
+          ),
+          NavigationDestination(
+              icon: Icon(Icons.chat_bubble_outline),
+              label: 'Chat',
           ),
           NavigationDestination(
             icon: Icon(Icons.library_books_rounded),

@@ -1,19 +1,19 @@
 import 'dart:convert';
+
+import 'package:amplify_authenticator/amplify_authenticator.dart'; // Needed for SignOutButton
+// 1. AWS Imports
+import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:percent_indicator/percent_indicator.dart';
-// 1. AWS Imports
-import 'package:amplify_flutter/amplify_flutter.dart';
-import 'package:amplify_api/amplify_api.dart';
-import 'package:amplify_authenticator/amplify_authenticator.dart'; // Needed for SignOutButton
 
-// 2. Screen Imports
-import '../../counselling/screens/talk_to_counsellor.dart';
 import '../../../auth/role_selection_screen.dart';
-import 'CounselorHomeScreen.dart'; // Ensure this file exists
+// 2. Screen Imports
+import '../../../counsellor/home/main_screen.dart';
+import '../../counselling/screens/talk_to_counsellor.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -53,8 +53,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         variables: {'id': user.userId},
       );
 
-      final response =
-      await Amplify.API.query(request: request).response;
+      final response = await Amplify.API.query(request: request).response;
 
       if (response.errors.isNotEmpty || response.data == null) {
         _handleMissingProfile();
@@ -76,9 +75,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => const CounselorHomeScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const CounsellorMainScreen()),
         );
         return;
       }
@@ -96,7 +93,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-
   void _handleMissingProfile() {
     if (!mounted) return;
     setState(() {
@@ -105,9 +101,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _isLoading = false;
     });
   }
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -128,11 +121,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.account_circle_outlined, size: 80, color: Colors.orange),
+              const Icon(
+                Icons.account_circle_outlined,
+                size: 80,
+                color: Colors.orange,
+              ),
               const SizedBox(height: 24),
               Text(
                 "Profile Missing",
-                style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 12),
               const Text(
@@ -149,16 +149,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onPressed: () {
                     // Navigate to Role Selection Screen
                     Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (_) => const RoleSelectionScreen())
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const RoleSelectionScreen(),
+                      ),
                     );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E293B),
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: const Text("Complete Setup", style: TextStyle(color: Colors.white)),
+                  child: const Text(
+                    "Complete Setup",
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -453,15 +460,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
         LineChartData(
           gridData: const FlGridData(show: false),
           titlesData: FlTitlesData(
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 32,
                 interval: 1,
                 getTitlesWidget: (value, meta) {
-                  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                  const days = [
+                    'Mon',
+                    'Tue',
+                    'Wed',
+                    'Thu',
+                    'Fri',
+                    'Sat',
+                    'Sun',
+                  ];
                   final index = value.toInt();
                   if (index >= 0 && index < days.length) {
                     return Padding(
@@ -480,7 +499,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
             ),
-            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
           ),
           borderData: FlBorderData(show: false),
           minX: 0,
@@ -548,12 +569,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildInfoCard(
-      String title,
-      String value,
-      double percent,
-      IconData icon,
-      Color color,
-      ) {
+    String title,
+    String value,
+    double percent,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
