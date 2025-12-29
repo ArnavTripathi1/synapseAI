@@ -1,7 +1,5 @@
 import 'dart:convert';
-
-import 'package:amplify_authenticator/amplify_authenticator.dart'; // Needed for SignOutButton
-// 1. AWS Imports
+import 'package:amplify_authenticator/amplify_authenticator.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -10,8 +8,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 
+// SCREEN IMPORTS
 import '../../../auth/role_selection_screen.dart';
-// 2. Screen Imports
 import '../../../counsellor/home/main_screen.dart';
 import '../../counselling/screens/talk_to_counsellor.dart';
 
@@ -23,55 +21,87 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // 3. State Variables
+  // --- STATE VARIABLES ---
   String _userName = "Loading...";
   int _wellnessScore = 0;
+  String _currentMood = "Neutral";
+
+  // Chart & Lifestyle Data
+  List<FlSpot> _moodSpots = const [FlSpot(0, 0)]; // Default empty line
+  String _avgSleep = "0h";
+  double _sleepPercent = 0.0;
+  String _avgFocus = "0h";
+  double _focusPercent = 0.0;
+
   bool _isLoading = true;
-  bool _profileExists = true; // Tracks if we need to force setup
+  bool _profileExists = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchUserData();
+    _fetchDashboardData();
   }
 
-  // 4. The Query Function (With Strict Check)
-  Future<void> _fetchUserData() async {
+  // --- DATA FETCHING ---
+  Future<void> _fetchDashboardData() async {
     try {
       final user = await Amplify.Auth.getCurrentUser();
 
-      final request = GraphQLRequest<String>(
-        document: '''
-        query GetUserProfile(\$id: ID!) {
+      // 1. Query User Profile AND Linked Student Data
+      const graphQLDocument = '''
+        query GetUserAndStudentData(\$id: ID!) {
           getUserProfile(id: \$id) {
             id
             name
             role
+            studentProfile {
+              id
+              wellnessScore
+              currentMood
+              moodLogs {
+                items {
+                  score
+                  date
+                  sleepHours
+                  focusHours
+                }
+              }
+            }
           }
         }
-      ''',
+      ''';
+
+      // 2. Request with EXPLICIT Authorization Mode
+      final request = GraphQLRequest<String>(
+        document: graphQLDocument,
         variables: {'id': user.userId},
+        // -----------------------------------------------------------
+        // CRITICAL FIX: explicit ownership check
+        // -----------------------------------------------------------
+        authorizationMode: APIAuthorizationType.userPools,
       );
 
       final response = await Amplify.API.query(request: request).response;
 
-      if (response.errors.isNotEmpty || response.data == null) {
+      if (response.data == null || response.errors.isNotEmpty) {
+        if (response.errors.isNotEmpty) {
+          safePrint("Query Errors: ${response.errors}");
+        }
         _handleMissingProfile();
         return;
       }
 
       final data = jsonDecode(response.data!);
-      final profile = data['getUserProfile'];
+      final userProfile = data['getUserProfile'];
 
-      if (profile == null) {
+      if (userProfile == null) {
+        // Profile doesn't exist in DB yet
         _handleMissingProfile();
         return;
       }
 
-      final String role = profile['role'];
-
-      // 🔹 ROLE-BASED REDIRECTION (HERE)
-      if (role == 'COUNSELOR') {
+      // 3. Role Check & Redirection
+      if (userProfile['role'] == 'COUNSELOR') {
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
@@ -80,15 +110,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
 
-      // 🔹 STUDENT FLOW
+      // 4. Parse Student Data
+      final studentData = userProfile['studentProfile'];
+
+      // Process Mood Logs for Chart
+      List<FlSpot> spots = [];
+      double totalSleep = 0;
+      double totalFocus = 0;
+      int logCount = 0;
+
+      if (studentData != null && studentData['moodLogs'] != null) {
+        final logs = studentData['moodLogs']['items'] as List;
+
+        // Sort logs by date
+        logs.sort((a, b) => a['date'].compareTo(b['date']));
+
+        // Map last 7 logs to chart
+        for (int i = 0; i < logs.length; i++) {
+          if (i >= 7) break; // Limit to 7 days
+          final log = logs[i];
+          spots.add(FlSpot(i.toDouble(), (log['score'] as num).toDouble()));
+
+          totalSleep += (log['sleepHours'] ?? 0);
+          totalFocus += (log['focusHours'] ?? 0);
+        }
+        logCount = logs.length > 7 ? 7 : logs.length;
+      }
+
+      // 5. Update UI State
       if (!mounted) return;
       setState(() {
-        _userName = profile['name'];
+        _userName = userProfile['name'];
         _profileExists = true;
         _isLoading = false;
+
+        if (studentData != null) {
+          _wellnessScore = studentData['wellnessScore'] ?? 50;
+          _currentMood = studentData['currentMood'] ?? "Neutral";
+
+          if (spots.isNotEmpty) {
+            _moodSpots = spots;
+            // Calculate Averages
+            double avgS = logCount > 0 ? totalSleep / logCount : 0;
+            _avgSleep = "${avgS.toStringAsFixed(1)}h";
+            _sleepPercent = (avgS / 8).clamp(0.0, 1.0);
+
+            double avgF = logCount > 0 ? totalFocus / logCount : 0;
+            _avgFocus = "${avgF.toStringAsFixed(1)}h";
+            _focusPercent = (avgF / 6).clamp(0.0, 1.0);
+          }
+        }
       });
+
     } catch (e) {
-      safePrint("Dashboard error: $e");
+      safePrint("Dashboard fetch error: $e");
       _handleMissingProfile();
     }
   }
@@ -104,7 +179,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // A. LOADING STATE
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFFF8FAFC),
@@ -112,7 +186,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    // B. MISSING PROFILE STATE (Forces Setup)
     if (!_profileExists) {
       return Scaffold(
         backgroundColor: Colors.white,
@@ -121,18 +194,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.account_circle_outlined,
-                size: 80,
-                color: Colors.orange,
-              ),
+              const Icon(Icons.account_circle_outlined, size: 80, color: Colors.orange),
               const SizedBox(height: 24),
               Text(
                 "Profile Missing",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               const Text(
@@ -141,42 +207,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 32),
-
-              // Button to Go to Setup
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // Navigate to Role Selection Screen
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const RoleSelectionScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
                     );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E293B),
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text(
-                    "Complete Setup",
-                    style: TextStyle(color: Colors.white),
-                  ),
+                  child: const Text("Complete Setup", style: TextStyle(color: Colors.white)),
                 ),
               ),
               const SizedBox(height: 16),
-              const SignOutButton(), // Allows user to logout and retry
+              const SignOutButton(),
             ],
           ),
         ),
       );
     }
 
-    // C. DASHBOARD STATE (Success)
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
@@ -196,10 +251,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _buildSectionTitle("Weekly Trends"),
               const SizedBox(height: 16),
               _buildMoodChart(),
+
               const SizedBox(height: 24),
               _buildSectionTitle("Lifestyle Pulse"),
               const SizedBox(height: 16),
               _buildLifestyleGrid(),
+
               const SizedBox(height: 80),
             ],
           ),
@@ -219,10 +276,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Text(
               "Good Morning,",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: GoogleFonts.plusJakartaSans(fontSize: 16, color: Colors.grey[600]),
             ),
             Text(
               _userName,
@@ -239,13 +293,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           decoration: const BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black12,
-                blurRadius: 10,
-                offset: Offset(0, 5),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 5))],
           ),
           child: CircleAvatar(
             radius: 24,
@@ -298,7 +346,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    "You are doing great!",
+                    "Current Mood: $_currentMood",
                     style: GoogleFonts.plusJakartaSans(
                       color: const Color(0xFF1E293B).withOpacity(0.7),
                       fontSize: 14,
@@ -309,7 +357,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               CircularPercentIndicator(
                 radius: 30.0,
                 lineWidth: 6.0,
-                percent: _wellnessScore / 100,
+                percent: (_wellnessScore / 100).clamp(0.0, 1.0),
                 center: Text(
                   "$_wellnessScore%",
                   style: GoogleFonts.plusJakartaSans(
@@ -324,35 +372,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withOpacity(0.4)),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  FontAwesomeIcons.penToSquare,
-                  size: 16,
-                  color: Color(0xFF1E293B),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  "Log today's mood",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF1E293B),
-                    fontWeight: FontWeight.w600,
+          GestureDetector(
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Feature: Log Mood Screen coming soon!"))
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withOpacity(0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(FontAwesomeIcons.penToSquare, size: 16, color: Color(0xFF1E293B)),
+                  const SizedBox(width: 10),
+                  Text(
+                    "Log today's mood",
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFF1E293B),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: Color(0xFF1E293B),
-                ),
-              ],
+                  const Spacer(),
+                  const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF1E293B)),
+                ],
+              ),
             ),
           ),
         ],
@@ -365,9 +412,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => const TalkToCounsellorScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const TalkToCounsellorScreen()),
         );
       },
       child: Container(
@@ -389,15 +434,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.teal.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                FontAwesomeIcons.userDoctor,
-                color: Colors.teal.shade700,
-                size: 20,
-              ),
+              decoration: BoxDecoration(color: Colors.teal.shade50, shape: BoxShape.circle),
+              child: Icon(FontAwesomeIcons.userDoctor, color: Colors.teal.shade700, size: 20),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -415,10 +453,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 4),
                   Text(
                     "Book a confidential session",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      color: Colors.grey[500],
-                    ),
+                    style: GoogleFonts.plusJakartaSans(fontSize: 13, color: Colors.grey[500]),
                   ),
                 ],
               ),
@@ -449,59 +484,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5)),
         ],
       ),
       child: LineChart(
         LineChartData(
           gridData: const FlGridData(show: false),
           titlesData: FlTitlesData(
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 32,
-                interval: 1,
-                getTitlesWidget: (value, meta) {
-                  const days = [
-                    'Mon',
-                    'Tue',
-                    'Wed',
-                    'Thu',
-                    'Fri',
-                    'Sat',
-                    'Sun',
-                  ];
-                  final index = value.toInt();
-                  if (index >= 0 && index < days.length) {
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        days[index],
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    );
-                  }
-                  return const Text('');
-                },
-              ),
-            ),
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           ),
           borderData: FlBorderData(show: false),
           minX: 0,
@@ -510,20 +503,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           maxY: 10,
           lineBarsData: [
             LineChartBarData(
-              spots: const [
-                FlSpot(0, 6),
-                FlSpot(1, 8),
-                FlSpot(2, 5),
-                FlSpot(3, 7),
-                FlSpot(4, 6),
-                FlSpot(5, 9),
-                FlSpot(6, 8),
-              ],
+              spots: _moodSpots,
               isCurved: true,
               color: const Color(0xFFA1C4FD),
               barWidth: 4,
               isStrokeCapRound: true,
-              dotData: const FlDotData(show: false),
+              dotData: const FlDotData(show: true),
               belowBarData: BarAreaData(
                 show: true,
                 gradient: LinearGradient(
@@ -548,8 +533,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Expanded(
           child: _buildInfoCard(
             "Sleep",
-            "7h 30m",
-            0.75,
+            _avgSleep,
+            _sleepPercent,
             FontAwesomeIcons.moon,
             Colors.purpleAccent,
           ),
@@ -558,8 +543,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Expanded(
           child: _buildInfoCard(
             "Focus",
-            "4h 15m",
-            0.60,
+            _avgFocus,
+            _focusPercent,
             FontAwesomeIcons.brain,
             Colors.tealAccent,
           ),
@@ -568,24 +553,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.2, end: 0);
   }
 
-  Widget _buildInfoCard(
-    String title,
-    String value,
-    double percent,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildInfoCard(String title, String value, double percent, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5)),
         ],
       ),
       child: Column(
@@ -596,10 +571,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
                 child: Icon(icon, size: 16, color: color.withOpacity(0.8)),
               ),
               CircularPercentIndicator(
@@ -623,10 +595,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           Text(
             title,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
+            style: GoogleFonts.plusJakartaSans(fontSize: 14, color: Colors.grey[500]),
           ),
         ],
       ),

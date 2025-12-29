@@ -3,7 +3,9 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:amplify_api/amplify_api.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../counsellor/home/main_screen.dart';
+// Imports for navigation (ensure these paths match your project)
+import 'package:synapse/features/counsellor/dashboard/screens/counsellor_dashboard.dart';
+
 import '../student/home/main_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
@@ -16,7 +18,7 @@ class RoleSelectionScreen extends StatefulWidget {
 class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   final _nameController = TextEditingController();
 
-  // Backend value: 'STUDENT' or 'COUNSELOR'
+  // Backend value must match GraphQL Enum exactly: 'STUDENT' or 'COUNSELOR'
   String? _selectedRole;
   bool _isSaving = false;
 
@@ -32,7 +34,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
             style: GoogleFonts.plusJakartaSans(),
           ),
           backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
@@ -43,20 +44,27 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     try {
       final user = await Amplify.Auth.getCurrentUser();
 
-      final request = GraphQLRequest<String>(
-        document: '''
+      // Define the mutation
+      const graphQLDocument = '''
         mutation CreateUserProfile(\$input: CreateUserProfileInput!) {
           createUserProfile(input: \$input) {
             id
+            name
             role
           }
         }
-      ''',
+      ''';
+
+      final request = GraphQLRequest<String>(
+        document: graphQLDocument,
+        // FIX 1: Explicitly use User Pools to ensure the token is sent
+        authorizationMode: APIAuthorizationType.userPools,
         variables: {
           'input': {
             'id': user.userId,
             'name': _nameController.text.trim(),
-            'role': _selectedRole, // Expected: 'STUDENT' or 'COUNSELOR'
+            'role': _selectedRole,
+            // 'phoneNumber': ... // Add if you captured it
           }
         },
       );
@@ -64,17 +72,21 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       final response = await Amplify.API.mutate(request: request).response;
 
       if (response.errors.isNotEmpty) {
+        // Log the specific error from AppSync
+        safePrint("AppSync Error: ${response.errors.first.message}");
         throw Exception(response.errors.first.message);
       }
 
       if (!mounted) return;
-
       _redirectByRole(_selectedRole!);
+
     } catch (e) {
       safePrint("Profile creation error: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to save profile: ${e.toString()}")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.toString()}")),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -82,22 +94,25 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
 
   void _redirectByRole(String role) {
     late final Widget next;
-
+    // Switch case to handle redirection
     switch (role) {
       case 'COUNSELOR':
-        next = const CounsellorMainScreen(); // Ensure this import is correct
+      // Ensure you are navigating to the Dashboard wrapper that handles tabs
+        next = CounsellorDashboard(onSwitchTab: (index) {});
         break;
       case 'STUDENT':
       default:
-        next = const MainScreen(); // Ensure this import is correct
+        next = const MainScreen();
     }
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => next),
+    Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => next),
+            (route) => false // Clears the back stack so they can't go back to Role Selection
     );
   }
 
+  // ... (Rest of your build method and _buildRoleCard remain the same)
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -109,7 +124,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-              // 1. Header Section
               Text(
                 "Welcome to Synapse",
                 style: GoogleFonts.plusJakartaSans(
@@ -128,52 +142,27 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   height: 1.5,
                 ),
               ),
-
               const SizedBox(height: 40),
-
-              // 2. Name Input
               Text(
                 "What should we call you?",
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w600,
-                  color: _accentColor,
-                  fontSize: 14,
-                ),
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: _accentColor, fontSize: 14),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: _nameController,
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: Colors.black87),
                 decoration: InputDecoration(
                   hintText: "Enter your full name",
-                  hintStyle: GoogleFonts.plusJakartaSans(color: Colors.grey[400]),
                   filled: true,
                   fillColor: Colors.grey[50],
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(color: _brandColor, width: 1.5),
-                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                 ),
               ),
-
               const SizedBox(height: 32),
-
-              // 3. Role Selection
               Text(
                 "I am a...",
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w600,
-                  color: _accentColor,
-                  fontSize: 14,
-                ),
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: _accentColor, fontSize: 14),
               ),
               const SizedBox(height: 12),
-
               Row(
                 children: [
                   Expanded(
@@ -195,10 +184,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   ),
                 ],
               ),
-
               const Spacer(),
-
-              // 4. Continue Button
               SizedBox(
                 width: double.infinity,
                 height: 58,
@@ -206,30 +192,13 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   onPressed: _isSaving ? null : _saveProfile,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _brandColor,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    disabledBackgroundColor: _brandColor.withOpacity(0.6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                   child: _isSaving
-                      ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                  )
-                      : Text(
-                    "Continue",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text("Continue", style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
-              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -237,101 +206,25 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     );
   }
 
-  Widget _buildRoleCard({
-    required String label,
-    required String backendValue,
-    required IconData icon,
-    required String description,
-  }) {
+  Widget _buildRoleCard({required String label, required String backendValue, required IconData icon, required String description}) {
     final isSelected = _selectedRole == backendValue;
-
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedRole = backendValue;
-        });
-      },
+      onTap: () => setState(() => _selectedRole = backendValue),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
         height: 160,
         decoration: BoxDecoration(
           color: isSelected ? _brandColor.withOpacity(0.05) : Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? _brandColor : Colors.grey.shade200,
-            width: isSelected ? 2 : 1.5,
-          ),
-          boxShadow: isSelected
-              ? [
-            BoxShadow(
-              color: _brandColor.withOpacity(0.15),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            )
-          ]
-              : [],
+          border: Border.all(color: isSelected ? _brandColor : Colors.grey.shade200, width: 2),
         ),
-        child: Stack(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isSelected ? _brandColor.withOpacity(0.1) : Colors.grey[50],
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      icon,
-                      size: 32,
-                      color: isSelected ? _brandColor : Colors.grey[400],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    label,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: isSelected ? _brandColor : Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      color: Colors.grey[500],
-                      height: 1.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Checkmark Badge
-            if (isSelected)
-              Positioned(
-                top: 12,
-                right: 12,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: _brandColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check,
-                    size: 14,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+            Icon(icon, size: 32, color: isSelected ? _brandColor : Colors.grey[400]),
+            const SizedBox(height: 8),
+            Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? _brandColor : Colors.black87)),
+            Text(description, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
           ],
         ),
       ),
