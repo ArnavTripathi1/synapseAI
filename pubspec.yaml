@@ -57,6 +57,7 @@ dependencies:
   amplify_auth_cognito: ^2.4.0
   amplify_authenticator: ^2.4.0
   amplify_api: ^2.4.0
+  http: ^1.6.0
 
 
 
