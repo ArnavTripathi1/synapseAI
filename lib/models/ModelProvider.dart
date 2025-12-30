@@ -49,7 +49,7 @@ export 'UserRole.dart';
 
 class ModelProvider implements amplify_core.ModelProviderInterface {
   @override
-  String version = "765e41efe54f01380b5543a703e0761e";
+  String version = "014ad9ec4db2425249d29cc71cf6813f";
   @override
   List<amplify_core.ModelSchema> modelSchemas = [AIChatMessage.schema, AIChatSession.schema, Appointment.schema, ChatRoom.schema, ChatRoomUser.schema, CounselorProfile.schema, Message.schema, MoodLog.schema, Resource.schema, StudentProfile.schema, UserProfile.schema];
   @override

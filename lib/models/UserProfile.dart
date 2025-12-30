@@ -335,14 +335,14 @@ class UserProfile extends amplify_core.Model {
       key: UserProfile.STUDENTPROFILE,
       isRequired: false,
       ofModelName: 'StudentProfile',
-      associatedKey: StudentProfile.ID
+      associatedKey: StudentProfile.USER
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.hasOne(
       key: UserProfile.COUNSELORPROFILE,
       isRequired: false,
       ofModelName: 'CounselorProfile',
-      associatedKey: CounselorProfile.ID
+      associatedKey: CounselorProfile.USER
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.hasMany(

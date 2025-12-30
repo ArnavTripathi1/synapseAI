@@ -5,11 +5,12 @@ enum UserRole {
 }
 
 enum AppointmentStatus {
-  PENDING
-  CONFIRMED
+  AVAILABLE
+  PENDING     # Requested by student, waiting for approval
+  CONFIRMED   # Approved
   COMPLETED
   CANCELLED
-  BLOCKED # Used when Counselor toggles a slot to "Unavailable"
+  BLOCKED
 }
 
 enum ResourceType {
@@ -22,13 +23,13 @@ type UserProfile
 @model
 @auth(rules: [
   { allow: owner },
-  { allow: private, operations: [read] } # Allows search/lookup
+  { allow: private, operations: [read] } # Allows search/lookup for counselors/students
 ]) {
   id: ID!
   name: String!
   role: UserRole!
   imageUrl: String
-  phoneNumber: String # Shared contact field
+  phoneNumber: String
 
   # Navigation links to specific profiles
   studentProfile: StudentProfile @hasOne
@@ -48,9 +49,12 @@ type StudentProfile
   id: ID!
   userProfileID: ID!
 
-  # Academic Details (Visible in Session Details)
-  branch: String # e.g. "CSE"
-  year: String   # e.g. "2nd Year"
+  # ✅ LINKED: Fetch Name/Image from UserProfile directly
+  user: UserProfile @belongsTo(fields: ["userProfileID"])
+
+  # Academic Details
+  branch: String
+  year: String
 
   # Dashboard Stats
   wellnessScore: Int
@@ -71,6 +75,9 @@ type CounselorProfile
   id: ID!
   userProfileID: ID!
 
+  # ✅ LINKED: Fetch Name/Image from UserProfile
+  user: UserProfile @belongsTo(fields: ["userProfileID"])
+
   # Professional Details
   specialization: String!
   experienceYears: Int
@@ -78,12 +85,12 @@ type CounselorProfile
   aboutMe: String
   languages: [String]
 
-  # New Fields from EditProfileScreen
+  # Profile Details
   licenseNumber: String
-  fee: Float # Hourly rate
-  isVerified: Boolean # For the green badge
+  fee: Float
+  isVerified: Boolean
 
-  # Dashboard Status (Online/Offline Toggle)
+  # Dashboard Status
   isOnline: Boolean
 
   # Relationships
@@ -94,39 +101,34 @@ type CounselorProfile
 type Appointment
 @model
 @auth(rules: [
-  { allow: owner }, # Student (Creator) can Read/Update
-  # Counselor (Assigned) can Read/Update (Accept/Reject/Block)
+  { allow: owner },
   { allow: owner, ownerField: "counselorID", operations: [read, update] }
 ]) {
   id: ID!
-
-  # Relationships
+  # Mandatory field, so we use "0000" for empty slots
   studentID: ID! @index(name: "byStudent", sortKeyFields: ["date"])
+  student: StudentProfile @belongsTo(fields: ["studentID"])
+
   counselorID: ID! @index(name: "byCounselor", sortKeyFields: ["date"])
+  counselor: CounselorProfile @belongsTo(fields: ["counselorID"])
 
-  # Details
   date: AWSDate!
-  timeSlot: String!      # "10:00 AM"
+  timeSlot: String!
   status: AppointmentStatus!
-  topic: String          # "Academic Stress", "Anxiety" (For SessionCard)
-
-  # Logistics
-  meetingLink: String    # For "Join Now" button
-  counselorNotes: String # Private notes for Counselor (EditSessionScreen)
+  topic: String
+  meetingLink: String
+  counselorNotes: String
 }
 
-# 6. Chat System
+# 6. Chat System (Human-to-Human)
 type ChatRoom
 @model
 @auth(rules: [{ allow: private }]) {
   id: ID!
-  # Many-to-Many connection
   users: [ChatRoomUser] @hasMany(indexName: "byChatRoom", fields: ["id"])
-
-  # Messages
   messages: [Message] @hasMany(indexName: "byChatRoom", fields: ["id"])
 
-  # For List View Performance (ChatsTab)
+  # For List View Performance
   lastMessageContent: String
   lastMessageTime: AWSDateTime
 }
@@ -141,7 +143,6 @@ type ChatRoomUser
   user: UserProfile @belongsTo(fields: ["userID"])
   chatRoom: ChatRoom @belongsTo(fields: ["chatRoomID"])
 
-  # Unread badge count for this specific user
   unreadCount: Int
 }
 
@@ -153,8 +154,6 @@ type Message
   senderID: ID!
   content: String!
   createdAt: AWSDateTime!
-
-  # For Read Receipts (Blue ticks)
   isRead: Boolean
 }
 
@@ -171,7 +170,7 @@ type MoodLog
   focusHours: Float
 }
 
-# 8. Resources (Articles/Videos)
+# 8. Resources (Content Library)
 type Resource
 @model
 @auth(rules: [
@@ -190,17 +189,16 @@ type Resource
   isFeatured: Boolean
 }
 
-# 9. AI Chat History
+# 9. AI Chat History (Gemini Chat)
 type AIChatSession
 @model
 @auth(rules: [{ allow: owner }]) {
   id: ID!
-  title: String! # e.g. "Anxiety Help" (Generated from first prompt)
+  title: String!
 
-  # Relationship
   messages: [AIChatMessage] @hasMany(indexName: "bySession", fields: ["id"])
 
-  # For sorting the sidebar
+  # Explicit fields for Dart model generation
   updatedAt: AWSDateTime
   createdAt: AWSDateTime
 }
@@ -212,6 +210,8 @@ type AIChatMessage
   sessionID: ID! @index(name: "bySession", sortKeyFields: ["createdAt"])
 
   content: String!
-  isUser: Boolean! # true = User, false = AI
+  isUser: Boolean!
+
+  # Explicit fields for Dart model generation
   createdAt: AWSDateTime!
 }

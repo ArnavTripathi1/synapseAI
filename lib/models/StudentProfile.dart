@@ -28,7 +28,7 @@ import 'package:collection/collection.dart';
 class StudentProfile extends amplify_core.Model {
   static const classType = const _StudentProfileModelType();
   final String id;
-  final String? _userProfileID;
+  final UserProfile? _user;
   final String? _branch;
   final String? _year;
   final int? _wellnessScore;
@@ -51,17 +51,8 @@ class StudentProfile extends amplify_core.Model {
       );
   }
   
-  String get userProfileID {
-    try {
-      return _userProfileID!;
-    } catch(e) {
-      throw amplify_core.AmplifyCodeGenModelException(
-          amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
-          recoverySuggestion:
-            amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastRecoverySuggestion,
-          underlyingException: e.toString()
-          );
-    }
+  UserProfile? get user {
+    return _user;
   }
   
   String? get branch {
@@ -96,12 +87,12 @@ class StudentProfile extends amplify_core.Model {
     return _updatedAt;
   }
   
-  const StudentProfile._internal({required this.id, required userProfileID, branch, year, wellnessScore, currentMood, moodLogs, appointments, createdAt, updatedAt}): _userProfileID = userProfileID, _branch = branch, _year = year, _wellnessScore = wellnessScore, _currentMood = currentMood, _moodLogs = moodLogs, _appointments = appointments, _createdAt = createdAt, _updatedAt = updatedAt;
+  const StudentProfile._internal({required this.id, user, branch, year, wellnessScore, currentMood, moodLogs, appointments, createdAt, updatedAt}): _user = user, _branch = branch, _year = year, _wellnessScore = wellnessScore, _currentMood = currentMood, _moodLogs = moodLogs, _appointments = appointments, _createdAt = createdAt, _updatedAt = updatedAt;
   
-  factory StudentProfile({String? id, required String userProfileID, String? branch, String? year, int? wellnessScore, String? currentMood, List<MoodLog>? moodLogs, List<Appointment>? appointments}) {
+  factory StudentProfile({String? id, UserProfile? user, String? branch, String? year, int? wellnessScore, String? currentMood, List<MoodLog>? moodLogs, List<Appointment>? appointments}) {
     return StudentProfile._internal(
       id: id == null ? amplify_core.UUID.getUUID() : id,
-      userProfileID: userProfileID,
+      user: user,
       branch: branch,
       year: year,
       wellnessScore: wellnessScore,
@@ -119,7 +110,7 @@ class StudentProfile extends amplify_core.Model {
     if (identical(other, this)) return true;
     return other is StudentProfile &&
       id == other.id &&
-      _userProfileID == other._userProfileID &&
+      _user == other._user &&
       _branch == other._branch &&
       _year == other._year &&
       _wellnessScore == other._wellnessScore &&
@@ -137,7 +128,7 @@ class StudentProfile extends amplify_core.Model {
     
     buffer.write("StudentProfile {");
     buffer.write("id=" + "$id" + ", ");
-    buffer.write("userProfileID=" + "$_userProfileID" + ", ");
+    buffer.write("user=" + (_user != null ? _user!.toString() : "null") + ", ");
     buffer.write("branch=" + "$_branch" + ", ");
     buffer.write("year=" + "$_year" + ", ");
     buffer.write("wellnessScore=" + (_wellnessScore != null ? _wellnessScore!.toString() : "null") + ", ");
@@ -149,10 +140,10 @@ class StudentProfile extends amplify_core.Model {
     return buffer.toString();
   }
   
-  StudentProfile copyWith({String? userProfileID, String? branch, String? year, int? wellnessScore, String? currentMood, List<MoodLog>? moodLogs, List<Appointment>? appointments}) {
+  StudentProfile copyWith({UserProfile? user, String? branch, String? year, int? wellnessScore, String? currentMood, List<MoodLog>? moodLogs, List<Appointment>? appointments}) {
     return StudentProfile._internal(
       id: id,
-      userProfileID: userProfileID ?? this.userProfileID,
+      user: user ?? this.user,
       branch: branch ?? this.branch,
       year: year ?? this.year,
       wellnessScore: wellnessScore ?? this.wellnessScore,
@@ -162,7 +153,7 @@ class StudentProfile extends amplify_core.Model {
   }
   
   StudentProfile copyWithModelFieldValues({
-    ModelFieldValue<String>? userProfileID,
+    ModelFieldValue<UserProfile?>? user,
     ModelFieldValue<String?>? branch,
     ModelFieldValue<String?>? year,
     ModelFieldValue<int?>? wellnessScore,
@@ -172,7 +163,7 @@ class StudentProfile extends amplify_core.Model {
   }) {
     return StudentProfile._internal(
       id: id,
-      userProfileID: userProfileID == null ? this.userProfileID : userProfileID.value,
+      user: user == null ? this.user : user.value,
       branch: branch == null ? this.branch : branch.value,
       year: year == null ? this.year : year.value,
       wellnessScore: wellnessScore == null ? this.wellnessScore : wellnessScore.value,
@@ -184,7 +175,11 @@ class StudentProfile extends amplify_core.Model {
   
   StudentProfile.fromJson(Map<String, dynamic> json)  
     : id = json['id'],
-      _userProfileID = json['userProfileID'],
+      _user = json['user'] != null
+        ? json['user']['serializedData'] != null
+          ? UserProfile.fromJson(new Map<String, dynamic>.from(json['user']['serializedData']))
+          : UserProfile.fromJson(new Map<String, dynamic>.from(json['user']))
+        : null,
       _branch = json['branch'],
       _year = json['year'],
       _wellnessScore = (json['wellnessScore'] as num?)?.toInt(),
@@ -219,12 +214,12 @@ class StudentProfile extends amplify_core.Model {
       _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null;
   
   Map<String, dynamic> toJson() => {
-    'id': id, 'userProfileID': _userProfileID, 'branch': _branch, 'year': _year, 'wellnessScore': _wellnessScore, 'currentMood': _currentMood, 'moodLogs': _moodLogs?.map((MoodLog? e) => e?.toJson()).toList(), 'appointments': _appointments?.map((Appointment? e) => e?.toJson()).toList(), 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
+    'id': id, 'user': _user?.toJson(), 'branch': _branch, 'year': _year, 'wellnessScore': _wellnessScore, 'currentMood': _currentMood, 'moodLogs': _moodLogs?.map((MoodLog? e) => e?.toJson()).toList(), 'appointments': _appointments?.map((Appointment? e) => e?.toJson()).toList(), 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
   };
   
   Map<String, Object?> toMap() => {
     'id': id,
-    'userProfileID': _userProfileID,
+    'user': _user,
     'branch': _branch,
     'year': _year,
     'wellnessScore': _wellnessScore,
@@ -237,7 +232,9 @@ class StudentProfile extends amplify_core.Model {
 
   static final amplify_core.QueryModelIdentifier<StudentProfileModelIdentifier> MODEL_IDENTIFIER = amplify_core.QueryModelIdentifier<StudentProfileModelIdentifier>();
   static final ID = amplify_core.QueryField(fieldName: "id");
-  static final USERPROFILEID = amplify_core.QueryField(fieldName: "userProfileID");
+  static final USER = amplify_core.QueryField(
+    fieldName: "user",
+    fieldType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.model, ofModelName: 'UserProfile'));
   static final BRANCH = amplify_core.QueryField(fieldName: "branch");
   static final YEAR = amplify_core.QueryField(fieldName: "year");
   static final WELLNESSSCORE = amplify_core.QueryField(fieldName: "wellnessScore");
@@ -273,10 +270,11 @@ class StudentProfile extends amplify_core.Model {
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.id());
     
-    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: StudentProfile.USERPROFILEID,
-      isRequired: true,
-      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.belongsTo(
+      key: StudentProfile.USER,
+      isRequired: false,
+      targetNames: ['userProfileID'],
+      ofModelName: 'UserProfile'
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
@@ -314,7 +312,7 @@ class StudentProfile extends amplify_core.Model {
       key: StudentProfile.APPOINTMENTS,
       isRequired: false,
       ofModelName: 'Appointment',
-      associatedKey: Appointment.STUDENTID
+      associatedKey: Appointment.STUDENT
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.nonQueryField(

@@ -1,8 +1,11 @@
+import 'dart:convert';
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_api/amplify_api.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:synapse/features/counsellor/dashboard/screens/all_requests_screen.dart';
 
 class CounsellorDashboard extends StatefulWidget {
-  // Callback to tell the parent (MainScreen) to switch tabs
   final Function(int) onSwitchTab;
 
   const CounsellorDashboard({super.key, required this.onSwitchTab});
@@ -12,77 +15,291 @@ class CounsellorDashboard extends StatefulWidget {
 }
 
 class _CounsellorDashboardState extends State<CounsellorDashboard> {
-  bool _isOnline = true;
+  // --- State Variables ---
+  bool _isLoading = true;
+  bool _isOnline = false;
+  String _counselorProfileId = "";
+  String _counselorName = "Dr. Expert";
+  String _specialization = "Psychologist";
+
+  // Stats
+  int _pendingCount = 0;
+  int _todayCount = 0;
+  int _totalCount = 0;
+
+  // Lists
+  List<dynamic> _upcomingSessions = [];
+  List<dynamic> _pendingRequests = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData();
+  }
+
+  // ==========================================
+  // 🚀 BACKEND LOGIC (FIXED QUERY STRATEGY)
+  // ==========================================
+
+  Future<void> _fetchDashboardData() async {
+    try {
+      final user = await Amplify.Auth.getCurrentUser();
+
+      // ---------------------------------------------------------
+      // 1. FETCH PROFILE (DIRECT LOOKUP)
+      // Instead of relying on UserProfile linkage, we find the
+      // CounselorProfile that has this userProfileID.
+      // ---------------------------------------------------------
+      const String profileQuery = '''
+        query GetMyCounselorProfile(\$uid: ID!) {
+          listCounselorProfiles(filter: { userProfileID: { eq: \$uid } }) {
+            items {
+              id
+              specialization
+              isOnline
+              user {
+                name
+                imageUrl
+              }
+            }
+          }
+        }
+      ''';
+
+      final profileReq = GraphQLRequest<String>(
+        document: profileQuery,
+        variables: {'uid': user.userId},
+        authorizationMode: APIAuthorizationType.userPools,
+      );
+      final profileRes = await Amplify.API.query(request: profileReq).response;
+
+      if (profileRes.data == null) {
+        safePrint("Profile Fetch Error: ${profileRes.errors}");
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      final profileData = jsonDecode(profileRes.data!);
+      final items = profileData['listCounselorProfiles']['items'] as List;
+
+      if (items.isEmpty) {
+        safePrint("No Counselor Profile found for User ID: ${user.userId}");
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Profile not found. Please log in again."))
+          );
+        }
+        return;
+      }
+
+      // We found the profile!
+      final counselorProfile = items[0];
+      final userProfile = counselorProfile['user']; // Nested user data
+
+      _counselorProfileId = counselorProfile['id'];
+
+      // ---------------------------------------------------------
+      // 2. FETCH APPOINTMENTS
+      // ---------------------------------------------------------
+      const String apptQuery = '''
+        query ListCounselorAppointments(\$cid: ID!) {
+          listAppointments(filter: { counselorID: { eq: \$cid } }) {
+            items {
+              id
+              date
+              timeSlot
+              status
+              topic
+              student {
+                user {
+                  name
+                  imageUrl
+                }
+              }
+            }
+          }
+        }
+      ''';
+
+      final apptReq = GraphQLRequest<String>(
+        document: apptQuery,
+        variables: {'cid': _counselorProfileId},
+        authorizationMode: APIAuthorizationType.userPools,
+      );
+      final apptRes = await Amplify.API.query(request: apptReq).response;
+
+      if (apptRes.data == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      final apptData = jsonDecode(apptRes.data!);
+      final List<dynamic> allAppts = apptData['listAppointments']['items'];
+
+      // ---------------------------------------------------------
+      // 3. PROCESS DATA
+      // ---------------------------------------------------------
+      final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      int pCount = 0;
+      int tCount = 0;
+      int totCount = 0;
+      List<dynamic> upcoming = [];
+      List<dynamic> requests = [];
+
+      for (var appt in allAppts) {
+        final status = appt['status'];
+        final date = appt['date'];
+
+        if (status == 'COMPLETED') totCount++;
+
+        if (status == 'PENDING') {
+          pCount++;
+          requests.add(appt);
+        }
+
+        if (status == 'CONFIRMED') {
+          if (date == todayStr) tCount++;
+          if (date.compareTo(todayStr) >= 0) upcoming.add(appt);
+        }
+      }
+
+      // Sort lists
+      upcoming.sort((a, b) => a['date'].compareTo(b['date']));
+      requests.sort((a, b) => a['date'].compareTo(b['date']));
+
+      if (mounted) {
+        setState(() {
+          _counselorName = userProfile != null ? userProfile['name'] : "Doctor";
+          _specialization = counselorProfile['specialization'] ?? "Specialist";
+          _isOnline = counselorProfile['isOnline'] ?? false;
+          _pendingCount = pCount;
+          _todayCount = tCount;
+          _totalCount = totCount;
+          _upcomingSessions = upcoming;
+          _pendingRequests = requests;
+          _isLoading = false;
+        });
+      }
+
+    } catch (e) {
+      safePrint("Error fetching dashboard: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _toggleOnlineStatus(bool val) async {
+    setState(() => _isOnline = val);
+
+    try {
+      const String mutation = '''
+        mutation UpdateStatus(\$id: ID!, \$isOnline: Boolean!) {
+          updateCounselorProfile(input: { id: \$id, isOnline: \$isOnline }) {
+            id
+            isOnline
+          }
+        }
+      ''';
+
+      final req = GraphQLRequest<String>(
+        document: mutation,
+        variables: {'id': _counselorProfileId, 'isOnline': val},
+        authorizationMode: APIAuthorizationType.userPools,
+      );
+      await Amplify.API.mutate(request: req).response;
+    } catch (e) {
+      safePrint("Error toggling status: $e");
+      if (mounted) setState(() => _isOnline = !val);
+    }
+  }
+
+  // ==========================================
+  // 🎨 UI BUILD (UNCHANGED)
+  // ==========================================
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: _buildAppBar(),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Quick Stats Row
-            Row(
-              children: [
-                _buildStatCard(title: "Pending", count: "4", color: Colors.orange),
-                const SizedBox(width: 12),
-                _buildStatCard(title: "Today", count: "8", color: const Color(0xFF3b5998)),
-                const SizedBox(width: 12),
-                _buildStatCard(title: "Total", count: "124", color: Colors.blueGrey),
-              ],
-            ),
-            const SizedBox(height: 30),
+      body: RefreshIndicator(
+        onRefresh: _fetchDashboardData,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Quick Stats
+              Row(
+                children: [
+                  _buildStatCard(title: "Pending", count: "$_pendingCount", color: Colors.orange),
+                  const SizedBox(width: 12),
+                  _buildStatCard(title: "Today", count: "$_todayCount", color: const Color(0xFF3b5998)),
+                  const SizedBox(width: 12),
+                  _buildStatCard(title: "Total", count: "$_totalCount", color: Colors.blueGrey),
+                ],
+              ),
+              const SizedBox(height: 30),
 
-            // 2. Upcoming Sessions Section -> SWITCHES TO SCHEDULE TAB (Index 1)
-            _buildSectionHeader(
-              "Upcoming Sessions",
-              onSeeAll: () => widget.onSwitchTab(1),
-            ),
-            const SizedBox(height: 16),
+              // 2. Upcoming Sessions
+              _buildSectionHeader(
+                "Upcoming Sessions",
+                onSeeAll: () => widget.onSwitchTab(1),
+              ),
+              const SizedBox(height: 16),
 
-            const SessionCard(
-              name: "Aditya Kumar",
-              time: "10:00 AM - 11:00 AM",
-              issue: "Academic Stress",
-              isLive: true,
-            ),
-            const SessionCard(
-              name: "Riya Singh",
-              time: "02:00 PM - 03:00 PM",
-              issue: "Anxiety",
-              isLive: false,
-            ),
+              if (_upcomingSessions.isEmpty)
+                _buildEmptyState("No upcoming sessions today"),
 
-            const SizedBox(height: 30),
+              ..._upcomingSessions.take(3).map((appt) {
+                final studentName = appt['student']?['user']?['name'] ?? "Unknown";
+                final isToday = appt['date'] == DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-            // 3. New Requests Section -> NAVIGATES TO NEW SCREEN
-            _buildSectionHeader(
-              "New Requests",
-              onSeeAll: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const AllRequestsScreen())
+                return SessionCard(
+                  name: studentName,
+                  time: "${appt['timeSlot']} (${appt['date'].substring(5)})",
+                  issue: appt['topic'] ?? "General",
+                  isLive: isToday,
                 );
-              },
-            ),
-            const SizedBox(height: 16),
+              }),
 
-            const RequestCard(
-              name: "Vikram Malhotra",
-              issue: "Depression",
-              timeRequested: "Tomorrow, 4:00 PM",
-            ),
-            const RequestCard(
-              name: "Sanya Gupta",
-              issue: "Career Guidance",
-              timeRequested: "Fri, 11:00 AM",
-            ),
+              const SizedBox(height: 30),
 
-            const SizedBox(height: 80),
-          ],
+              // 3. Pending Requests
+              _buildSectionHeader(
+                "New Requests",
+                onSeeAll: () {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AllRequestsScreen())
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+
+              if (_pendingRequests.isEmpty)
+                _buildEmptyState("No pending requests"),
+
+              ..._pendingRequests.take(3).map((appt) {
+                final studentName = appt['student']?['user']?['name'] ?? "Unknown";
+                return RequestCard(
+                  name: studentName,
+                  issue: appt['topic'] ?? "General",
+                  timeRequested: "${appt['date']} @ ${appt['timeSlot']}",
+                );
+              }),
+
+              const SizedBox(height: 80),
+            ],
+          ),
         ),
       ),
     );
@@ -95,12 +312,12 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Dr. Anjali Sharma",
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 20),
+          Text(
+            _counselorName,
+            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 20),
           ),
           Text(
-            "Clinical Psychologist",
+            _specialization,
             style: TextStyle(color: Colors.grey[600], fontSize: 14, fontWeight: FontWeight.w400),
           ),
         ],
@@ -129,13 +346,28 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
                 child: Switch(
                   value: _isOnline,
                   activeColor: Colors.green,
-                  onChanged: (val) => setState(() => _isOnline = val),
+                  onChanged: _toggleOnlineStatus,
                 ),
               ),
             ],
           ),
         )
       ],
+    );
+  }
+
+  Widget _buildEmptyState(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!)
+      ),
+      child: Center(
+        child: Text(text, style: TextStyle(color: Colors.grey[400], fontStyle: FontStyle.italic)),
+      ),
     );
   }
 
@@ -185,21 +417,14 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
   }
 }
 
-// --- Refactored Widgets ---
-
+// --- Reused Widgets (Keep Same) ---
 class SessionCard extends StatelessWidget {
   final String name;
   final String time;
   final String issue;
   final bool isLive;
 
-  const SessionCard({
-    super.key,
-    required this.name,
-    required this.time,
-    required this.issue,
-    this.isLive = false,
-  });
+  const SessionCard({super.key, required this.name, required this.time, required this.issue, this.isLive = false});
 
   @override
   Widget build(BuildContext context) {
@@ -210,19 +435,13 @@ class SessionCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
+        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 25,
-                backgroundColor: Colors.grey[200],
-                child: const Icon(Icons.person, color: Colors.grey),
-              ),
+              CircleAvatar(radius: 25, backgroundColor: Colors.grey[200], child: Text(name.isNotEmpty ? name[0] : "?", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54))),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -232,19 +451,13 @@ class SessionCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3b5998).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        issue,
-                        style: const TextStyle(fontSize: 10, color: Color(0xFF3b5998), fontWeight: FontWeight.bold),
-                      ),
+                      decoration: BoxDecoration(color: const Color(0xFF3b5998).withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                      child: Text(issue, style: const TextStyle(fontSize: 10, color: Color(0xFF3b5998), fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.access_time_rounded, size: 16, color: Colors.grey[400]),
+              const Icon(Icons.access_time_rounded, size: 16, color: Colors.grey),
             ],
           ),
           const SizedBox(height: 16),
@@ -256,11 +469,7 @@ class SessionCard extends StatelessWidget {
               Text(time, style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500)),
               ElevatedButton.icon(
                 onPressed: () {},
-                icon: Icon(
-                  isLive ? Icons.videocam : Icons.videocam_off,
-                  size: 16,
-                  color: isLive ? Colors.white : Colors.grey[600],
-                ),
+                icon: Icon(isLive ? Icons.videocam : Icons.videocam_off, size: 16, color: isLive ? Colors.white : Colors.grey[600]),
                 label: Text(isLive ? "Join Now" : "Wait"),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isLive ? Colors.redAccent : Colors.grey[200],
@@ -270,6 +479,39 @@ class SessionCard extends StatelessWidget {
                   minimumSize: const Size(0, 36),
                 ),
               )
+            ],
+          )
+        ],
+      ),
+    );
+  }
+}
+
+class RequestCard extends StatelessWidget {
+  final String name, issue, timeRequested;
+  const RequestCard({super.key, required this.name, required this.issue, required this.timeRequested});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[200]!)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 4),
+              Text("$issue • $timeRequested", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            ],
+          ),
+          Row(
+            children: [
+              IconButton(onPressed: () {}, icon: const Icon(Icons.close, color: Colors.red)),
+              IconButton(onPressed: () {}, icon: const Icon(Icons.check, color: Colors.green)),
             ],
           )
         ],

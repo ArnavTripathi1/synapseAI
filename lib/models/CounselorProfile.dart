@@ -28,7 +28,7 @@ import 'package:collection/collection.dart';
 class CounselorProfile extends amplify_core.Model {
   static const classType = const _CounselorProfileModelType();
   final String id;
-  final String? _userProfileID;
+  final UserProfile? _user;
   final String? _specialization;
   final int? _experienceYears;
   final double? _rating;
@@ -55,17 +55,8 @@ class CounselorProfile extends amplify_core.Model {
       );
   }
   
-  String get userProfileID {
-    try {
-      return _userProfileID!;
-    } catch(e) {
-      throw amplify_core.AmplifyCodeGenModelException(
-          amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
-          recoverySuggestion:
-            amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastRecoverySuggestion,
-          underlyingException: e.toString()
-          );
-    }
+  UserProfile? get user {
+    return _user;
   }
   
   String get specialization {
@@ -125,12 +116,12 @@ class CounselorProfile extends amplify_core.Model {
     return _updatedAt;
   }
   
-  const CounselorProfile._internal({required this.id, required userProfileID, required specialization, experienceYears, rating, aboutMe, languages, licenseNumber, fee, isVerified, isOnline, appointments, createdAt, updatedAt}): _userProfileID = userProfileID, _specialization = specialization, _experienceYears = experienceYears, _rating = rating, _aboutMe = aboutMe, _languages = languages, _licenseNumber = licenseNumber, _fee = fee, _isVerified = isVerified, _isOnline = isOnline, _appointments = appointments, _createdAt = createdAt, _updatedAt = updatedAt;
+  const CounselorProfile._internal({required this.id, user, required specialization, experienceYears, rating, aboutMe, languages, licenseNumber, fee, isVerified, isOnline, appointments, createdAt, updatedAt}): _user = user, _specialization = specialization, _experienceYears = experienceYears, _rating = rating, _aboutMe = aboutMe, _languages = languages, _licenseNumber = licenseNumber, _fee = fee, _isVerified = isVerified, _isOnline = isOnline, _appointments = appointments, _createdAt = createdAt, _updatedAt = updatedAt;
   
-  factory CounselorProfile({String? id, required String userProfileID, required String specialization, int? experienceYears, double? rating, String? aboutMe, List<String>? languages, String? licenseNumber, double? fee, bool? isVerified, bool? isOnline, List<Appointment>? appointments}) {
+  factory CounselorProfile({String? id, UserProfile? user, required String specialization, int? experienceYears, double? rating, String? aboutMe, List<String>? languages, String? licenseNumber, double? fee, bool? isVerified, bool? isOnline, List<Appointment>? appointments}) {
     return CounselorProfile._internal(
       id: id == null ? amplify_core.UUID.getUUID() : id,
-      userProfileID: userProfileID,
+      user: user,
       specialization: specialization,
       experienceYears: experienceYears,
       rating: rating,
@@ -152,7 +143,7 @@ class CounselorProfile extends amplify_core.Model {
     if (identical(other, this)) return true;
     return other is CounselorProfile &&
       id == other.id &&
-      _userProfileID == other._userProfileID &&
+      _user == other._user &&
       _specialization == other._specialization &&
       _experienceYears == other._experienceYears &&
       _rating == other._rating &&
@@ -174,7 +165,7 @@ class CounselorProfile extends amplify_core.Model {
     
     buffer.write("CounselorProfile {");
     buffer.write("id=" + "$id" + ", ");
-    buffer.write("userProfileID=" + "$_userProfileID" + ", ");
+    buffer.write("user=" + (_user != null ? _user!.toString() : "null") + ", ");
     buffer.write("specialization=" + "$_specialization" + ", ");
     buffer.write("experienceYears=" + (_experienceYears != null ? _experienceYears!.toString() : "null") + ", ");
     buffer.write("rating=" + (_rating != null ? _rating!.toString() : "null") + ", ");
@@ -191,10 +182,10 @@ class CounselorProfile extends amplify_core.Model {
     return buffer.toString();
   }
   
-  CounselorProfile copyWith({String? userProfileID, String? specialization, int? experienceYears, double? rating, String? aboutMe, List<String>? languages, String? licenseNumber, double? fee, bool? isVerified, bool? isOnline, List<Appointment>? appointments}) {
+  CounselorProfile copyWith({UserProfile? user, String? specialization, int? experienceYears, double? rating, String? aboutMe, List<String>? languages, String? licenseNumber, double? fee, bool? isVerified, bool? isOnline, List<Appointment>? appointments}) {
     return CounselorProfile._internal(
       id: id,
-      userProfileID: userProfileID ?? this.userProfileID,
+      user: user ?? this.user,
       specialization: specialization ?? this.specialization,
       experienceYears: experienceYears ?? this.experienceYears,
       rating: rating ?? this.rating,
@@ -208,7 +199,7 @@ class CounselorProfile extends amplify_core.Model {
   }
   
   CounselorProfile copyWithModelFieldValues({
-    ModelFieldValue<String>? userProfileID,
+    ModelFieldValue<UserProfile?>? user,
     ModelFieldValue<String>? specialization,
     ModelFieldValue<int?>? experienceYears,
     ModelFieldValue<double?>? rating,
@@ -222,7 +213,7 @@ class CounselorProfile extends amplify_core.Model {
   }) {
     return CounselorProfile._internal(
       id: id,
-      userProfileID: userProfileID == null ? this.userProfileID : userProfileID.value,
+      user: user == null ? this.user : user.value,
       specialization: specialization == null ? this.specialization : specialization.value,
       experienceYears: experienceYears == null ? this.experienceYears : experienceYears.value,
       rating: rating == null ? this.rating : rating.value,
@@ -238,7 +229,11 @@ class CounselorProfile extends amplify_core.Model {
   
   CounselorProfile.fromJson(Map<String, dynamic> json)  
     : id = json['id'],
-      _userProfileID = json['userProfileID'],
+      _user = json['user'] != null
+        ? json['user']['serializedData'] != null
+          ? UserProfile.fromJson(new Map<String, dynamic>.from(json['user']['serializedData']))
+          : UserProfile.fromJson(new Map<String, dynamic>.from(json['user']))
+        : null,
       _specialization = json['specialization'],
       _experienceYears = (json['experienceYears'] as num?)?.toInt(),
       _rating = (json['rating'] as num?)?.toDouble(),
@@ -265,12 +260,12 @@ class CounselorProfile extends amplify_core.Model {
       _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null;
   
   Map<String, dynamic> toJson() => {
-    'id': id, 'userProfileID': _userProfileID, 'specialization': _specialization, 'experienceYears': _experienceYears, 'rating': _rating, 'aboutMe': _aboutMe, 'languages': _languages, 'licenseNumber': _licenseNumber, 'fee': _fee, 'isVerified': _isVerified, 'isOnline': _isOnline, 'appointments': _appointments?.map((Appointment? e) => e?.toJson()).toList(), 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
+    'id': id, 'user': _user?.toJson(), 'specialization': _specialization, 'experienceYears': _experienceYears, 'rating': _rating, 'aboutMe': _aboutMe, 'languages': _languages, 'licenseNumber': _licenseNumber, 'fee': _fee, 'isVerified': _isVerified, 'isOnline': _isOnline, 'appointments': _appointments?.map((Appointment? e) => e?.toJson()).toList(), 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
   };
   
   Map<String, Object?> toMap() => {
     'id': id,
-    'userProfileID': _userProfileID,
+    'user': _user,
     'specialization': _specialization,
     'experienceYears': _experienceYears,
     'rating': _rating,
@@ -287,7 +282,9 @@ class CounselorProfile extends amplify_core.Model {
 
   static final amplify_core.QueryModelIdentifier<CounselorProfileModelIdentifier> MODEL_IDENTIFIER = amplify_core.QueryModelIdentifier<CounselorProfileModelIdentifier>();
   static final ID = amplify_core.QueryField(fieldName: "id");
-  static final USERPROFILEID = amplify_core.QueryField(fieldName: "userProfileID");
+  static final USER = amplify_core.QueryField(
+    fieldName: "user",
+    fieldType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.model, ofModelName: 'UserProfile'));
   static final SPECIALIZATION = amplify_core.QueryField(fieldName: "specialization");
   static final EXPERIENCEYEARS = amplify_core.QueryField(fieldName: "experienceYears");
   static final RATING = amplify_core.QueryField(fieldName: "rating");
@@ -325,10 +322,11 @@ class CounselorProfile extends amplify_core.Model {
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.id());
     
-    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: CounselorProfile.USERPROFILEID,
-      isRequired: true,
-      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.belongsTo(
+      key: CounselorProfile.USER,
+      isRequired: false,
+      targetNames: ['userProfileID'],
+      ofModelName: 'UserProfile'
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
@@ -390,7 +388,7 @@ class CounselorProfile extends amplify_core.Model {
       key: CounselorProfile.APPOINTMENTS,
       isRequired: false,
       ofModelName: 'Appointment',
-      associatedKey: Appointment.COUNSELORID
+      associatedKey: Appointment.COUNSELOR
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.nonQueryField(

@@ -27,8 +27,8 @@ import 'package:amplify_core/amplify_core.dart' as amplify_core;
 class Appointment extends amplify_core.Model {
   static const classType = const _AppointmentModelType();
   final String id;
-  final String? _studentID;
-  final String? _counselorID;
+  final StudentProfile? _student;
+  final CounselorProfile? _counselor;
   final amplify_core.TemporalDate? _date;
   final String? _timeSlot;
   final AppointmentStatus? _status;
@@ -51,30 +51,12 @@ class Appointment extends amplify_core.Model {
       );
   }
   
-  String get studentID {
-    try {
-      return _studentID!;
-    } catch(e) {
-      throw amplify_core.AmplifyCodeGenModelException(
-          amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
-          recoverySuggestion:
-            amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastRecoverySuggestion,
-          underlyingException: e.toString()
-          );
-    }
+  StudentProfile? get student {
+    return _student;
   }
   
-  String get counselorID {
-    try {
-      return _counselorID!;
-    } catch(e) {
-      throw amplify_core.AmplifyCodeGenModelException(
-          amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
-          recoverySuggestion:
-            amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastRecoverySuggestion,
-          underlyingException: e.toString()
-          );
-    }
+  CounselorProfile? get counselor {
+    return _counselor;
   }
   
   amplify_core.TemporalDate get date {
@@ -136,13 +118,13 @@ class Appointment extends amplify_core.Model {
     return _updatedAt;
   }
   
-  const Appointment._internal({required this.id, required studentID, required counselorID, required date, required timeSlot, required status, topic, meetingLink, counselorNotes, createdAt, updatedAt}): _studentID = studentID, _counselorID = counselorID, _date = date, _timeSlot = timeSlot, _status = status, _topic = topic, _meetingLink = meetingLink, _counselorNotes = counselorNotes, _createdAt = createdAt, _updatedAt = updatedAt;
+  const Appointment._internal({required this.id, student, counselor, required date, required timeSlot, required status, topic, meetingLink, counselorNotes, createdAt, updatedAt}): _student = student, _counselor = counselor, _date = date, _timeSlot = timeSlot, _status = status, _topic = topic, _meetingLink = meetingLink, _counselorNotes = counselorNotes, _createdAt = createdAt, _updatedAt = updatedAt;
   
-  factory Appointment({String? id, required String studentID, required String counselorID, required amplify_core.TemporalDate date, required String timeSlot, required AppointmentStatus status, String? topic, String? meetingLink, String? counselorNotes}) {
+  factory Appointment({String? id, StudentProfile? student, CounselorProfile? counselor, required amplify_core.TemporalDate date, required String timeSlot, required AppointmentStatus status, String? topic, String? meetingLink, String? counselorNotes}) {
     return Appointment._internal(
       id: id == null ? amplify_core.UUID.getUUID() : id,
-      studentID: studentID,
-      counselorID: counselorID,
+      student: student,
+      counselor: counselor,
       date: date,
       timeSlot: timeSlot,
       status: status,
@@ -160,8 +142,8 @@ class Appointment extends amplify_core.Model {
     if (identical(other, this)) return true;
     return other is Appointment &&
       id == other.id &&
-      _studentID == other._studentID &&
-      _counselorID == other._counselorID &&
+      _student == other._student &&
+      _counselor == other._counselor &&
       _date == other._date &&
       _timeSlot == other._timeSlot &&
       _status == other._status &&
@@ -179,8 +161,8 @@ class Appointment extends amplify_core.Model {
     
     buffer.write("Appointment {");
     buffer.write("id=" + "$id" + ", ");
-    buffer.write("studentID=" + "$_studentID" + ", ");
-    buffer.write("counselorID=" + "$_counselorID" + ", ");
+    buffer.write("student=" + (_student != null ? _student!.toString() : "null") + ", ");
+    buffer.write("counselor=" + (_counselor != null ? _counselor!.toString() : "null") + ", ");
     buffer.write("date=" + (_date != null ? _date!.format() : "null") + ", ");
     buffer.write("timeSlot=" + "$_timeSlot" + ", ");
     buffer.write("status=" + (_status != null ? amplify_core.enumToString(_status)! : "null") + ", ");
@@ -194,11 +176,11 @@ class Appointment extends amplify_core.Model {
     return buffer.toString();
   }
   
-  Appointment copyWith({String? studentID, String? counselorID, amplify_core.TemporalDate? date, String? timeSlot, AppointmentStatus? status, String? topic, String? meetingLink, String? counselorNotes}) {
+  Appointment copyWith({StudentProfile? student, CounselorProfile? counselor, amplify_core.TemporalDate? date, String? timeSlot, AppointmentStatus? status, String? topic, String? meetingLink, String? counselorNotes}) {
     return Appointment._internal(
       id: id,
-      studentID: studentID ?? this.studentID,
-      counselorID: counselorID ?? this.counselorID,
+      student: student ?? this.student,
+      counselor: counselor ?? this.counselor,
       date: date ?? this.date,
       timeSlot: timeSlot ?? this.timeSlot,
       status: status ?? this.status,
@@ -208,8 +190,8 @@ class Appointment extends amplify_core.Model {
   }
   
   Appointment copyWithModelFieldValues({
-    ModelFieldValue<String>? studentID,
-    ModelFieldValue<String>? counselorID,
+    ModelFieldValue<StudentProfile?>? student,
+    ModelFieldValue<CounselorProfile?>? counselor,
     ModelFieldValue<amplify_core.TemporalDate>? date,
     ModelFieldValue<String>? timeSlot,
     ModelFieldValue<AppointmentStatus>? status,
@@ -219,8 +201,8 @@ class Appointment extends amplify_core.Model {
   }) {
     return Appointment._internal(
       id: id,
-      studentID: studentID == null ? this.studentID : studentID.value,
-      counselorID: counselorID == null ? this.counselorID : counselorID.value,
+      student: student == null ? this.student : student.value,
+      counselor: counselor == null ? this.counselor : counselor.value,
       date: date == null ? this.date : date.value,
       timeSlot: timeSlot == null ? this.timeSlot : timeSlot.value,
       status: status == null ? this.status : status.value,
@@ -232,8 +214,16 @@ class Appointment extends amplify_core.Model {
   
   Appointment.fromJson(Map<String, dynamic> json)  
     : id = json['id'],
-      _studentID = json['studentID'],
-      _counselorID = json['counselorID'],
+      _student = json['student'] != null
+        ? json['student']['serializedData'] != null
+          ? StudentProfile.fromJson(new Map<String, dynamic>.from(json['student']['serializedData']))
+          : StudentProfile.fromJson(new Map<String, dynamic>.from(json['student']))
+        : null,
+      _counselor = json['counselor'] != null
+        ? json['counselor']['serializedData'] != null
+          ? CounselorProfile.fromJson(new Map<String, dynamic>.from(json['counselor']['serializedData']))
+          : CounselorProfile.fromJson(new Map<String, dynamic>.from(json['counselor']))
+        : null,
       _date = json['date'] != null ? amplify_core.TemporalDate.fromString(json['date']) : null,
       _timeSlot = json['timeSlot'],
       _status = amplify_core.enumFromString<AppointmentStatus>(json['status'], AppointmentStatus.values),
@@ -244,13 +234,13 @@ class Appointment extends amplify_core.Model {
       _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null;
   
   Map<String, dynamic> toJson() => {
-    'id': id, 'studentID': _studentID, 'counselorID': _counselorID, 'date': _date?.format(), 'timeSlot': _timeSlot, 'status': amplify_core.enumToString(_status), 'topic': _topic, 'meetingLink': _meetingLink, 'counselorNotes': _counselorNotes, 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
+    'id': id, 'student': _student?.toJson(), 'counselor': _counselor?.toJson(), 'date': _date?.format(), 'timeSlot': _timeSlot, 'status': amplify_core.enumToString(_status), 'topic': _topic, 'meetingLink': _meetingLink, 'counselorNotes': _counselorNotes, 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
   };
   
   Map<String, Object?> toMap() => {
     'id': id,
-    'studentID': _studentID,
-    'counselorID': _counselorID,
+    'student': _student,
+    'counselor': _counselor,
     'date': _date,
     'timeSlot': _timeSlot,
     'status': _status,
@@ -263,8 +253,12 @@ class Appointment extends amplify_core.Model {
 
   static final amplify_core.QueryModelIdentifier<AppointmentModelIdentifier> MODEL_IDENTIFIER = amplify_core.QueryModelIdentifier<AppointmentModelIdentifier>();
   static final ID = amplify_core.QueryField(fieldName: "id");
-  static final STUDENTID = amplify_core.QueryField(fieldName: "studentID");
-  static final COUNSELORID = amplify_core.QueryField(fieldName: "counselorID");
+  static final STUDENT = amplify_core.QueryField(
+    fieldName: "student",
+    fieldType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.model, ofModelName: 'StudentProfile'));
+  static final COUNSELOR = amplify_core.QueryField(
+    fieldName: "counselor",
+    fieldType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.model, ofModelName: 'CounselorProfile'));
   static final DATE = amplify_core.QueryField(fieldName: "date");
   static final TIMESLOT = amplify_core.QueryField(fieldName: "timeSlot");
   static final STATUS = amplify_core.QueryField(fieldName: "status");
@@ -305,16 +299,18 @@ class Appointment extends amplify_core.Model {
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.id());
     
-    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Appointment.STUDENTID,
-      isRequired: true,
-      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.belongsTo(
+      key: Appointment.STUDENT,
+      isRequired: false,
+      targetNames: ['studentID'],
+      ofModelName: 'StudentProfile'
     ));
     
-    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Appointment.COUNSELORID,
-      isRequired: true,
-      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.belongsTo(
+      key: Appointment.COUNSELOR,
+      isRequired: false,
+      targetNames: ['counselorID'],
+      ofModelName: 'CounselorProfile'
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(

@@ -1,20 +1,23 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_api/amplify_api.dart';
+
 import 'package:synapse/features/counsellor/schedule/screens/session_details_screen.dart';
 import 'package:synapse/features/counsellor/schedule/widgets/add_slot_sheet.dart';
 
-// 1. Model for a Time Slot
 class TimeSlot {
   final String id;
   final String time;
-  String status; // 'Available', 'Booked', 'Break', 'Unavailable'
+  String status;
   String? studentName;
-  bool isEnabled; // Corresponds to the Switch toggle
+  bool isEnabled;
 
   TimeSlot({
     required this.id,
     required this.time,
-    this.status = 'Available',
+    required this.status,
     this.studentName,
     this.isEnabled = true,
   });
@@ -28,126 +31,230 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
-  // State Variables
   int _selectedDateIndex = 0;
-
-  // FIX: Explicitly typed as List<DateTime> to prevent Type Error
   List<DateTime> _dates = [];
-
-  // Map Date Index to a List of Slots (Simulating database storage)
-  final Map<int, List<TimeSlot>> _scheduleData = {};
+  bool _isLoading = false;
+  String _counselorProfileId = "";
+  List<TimeSlot> _currentSlots = [];
 
   @override
   void initState() {
     super.initState();
+    safePrint("DEBUG: ScheduleScreen initState called");
     _generateDates();
-    _generateMockSlots();
+    _initializeScreen();
   }
 
-  // Generate next 14 days dynamically
   void _generateDates() {
     final now = DateTime.now();
     _dates = List.generate(14, (index) => now.add(Duration(days: index)));
   }
 
-  // Create fake data for demonstration
-  void _generateMockSlots() {
-    // Default pattern for a typical day
-    final defaultSlots = [
-      TimeSlot(id: '1', time: "09:00 AM", status: "Available"),
-      TimeSlot(
-        id: '2',
-        time: "10:00 AM",
-        status: "Booked",
-        studentName: "Aditya Kumar",
-      ),
-      TimeSlot(id: '3', time: "11:00 AM", status: "Available"),
-      TimeSlot(id: '4', time: "01:00 PM", status: "Break", isEnabled: false),
-      TimeSlot(id: '5', time: "02:00 PM", status: "Available"),
-      TimeSlot(
-        id: '6',
-        time: "03:00 PM",
-        status: "Booked",
-        studentName: "Riya Singh",
-      ),
-    ];
-
-    // Populate the map for all 14 days
-    for (int i = 0; i < 14; i++) {
-      // Create a DEEP COPY of the list so modifying one day doesn't affect others
-      _scheduleData[i] = defaultSlots
-          .map(
-            (e) => TimeSlot(
-              id: e.id,
-              time: e.time,
-              status: e.status,
-              studentName: e.studentName,
-              isEnabled: e.status != "Break", // Disable toggle for breaks
-            ),
-          )
-          .toList();
+  Future<void> _initializeScreen() async {
+    safePrint("DEBUG: Initializing Screen...");
+    await _fetchCounselorId();
+    if (_dates.isNotEmpty) {
+      safePrint("DEBUG: Fetching slots for first date: ${_dates[0]}");
+      _fetchSlotsForDate(_dates[0]);
+    } else {
+      safePrint("DEBUG: No dates generated!");
     }
   }
 
-  // Handle Switch Toggle logic
-  void _toggleSlotAvailability(int slotIndex, bool newValue) {
-    setState(() {
-      final currentSlots = _scheduleData[_selectedDateIndex]!;
-      currentSlots[slotIndex].isEnabled = newValue;
+  Future<void> _fetchCounselorId() async {
+    try {
+      final user = await Amplify.Auth.getCurrentUser();
+      safePrint("DEBUG: Current User ID: ${user.userId}");
 
-      // Update status text based on toggle
-      if (newValue) {
-        currentSlots[slotIndex].status = "Available";
-      } else {
-        currentSlots[slotIndex].status = "Unavailable";
+      const query = '''
+        query GetMyId(\$uid: ID!) {
+          listCounselorProfiles(filter: { userProfileID: { eq: \$uid } }) {
+            items { id }
+          }
+        }
+      ''';
+
+      final req = GraphQLRequest<String>(
+        document: query,
+        variables: {'uid': user.userId},
+        authorizationMode: APIAuthorizationType.userPools,
+      );
+
+      safePrint("DEBUG: Sending Counselor Profile Query...");
+      final res = await Amplify.API.query(request: req).response;
+
+      if (res.hasErrors) {
+        safePrint("DEBUG: Profile Query Errors: ${res.errors}");
+        return;
       }
-    });
+
+      if (res.data != null) {
+        final data = jsonDecode(res.data!);
+        final items = data['listCounselorProfiles']['items'] as List;
+        safePrint("DEBUG: Found ${items.length} Counselor Profiles");
+
+        if (items.isNotEmpty) {
+          _counselorProfileId = items[0]['id'];
+          safePrint("DEBUG: Set Counselor ID to: $_counselorProfileId");
+        } else {
+          safePrint("DEBUG: WARNING - No Counselor Profile found for this user.");
+        }
+      } else {
+        safePrint("DEBUG: Profile Query returned null data");
+      }
+    } catch (e) {
+      safePrint("DEBUG: Exception in _fetchCounselorId: $e");
+    }
   }
+
+  Future<void> _fetchSlotsForDate(DateTime date) async {
+    if (_counselorProfileId.isEmpty) {
+      safePrint("DEBUG: Aborting fetch. Counselor ID is empty.");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final formattedDate = DateFormat('yyyy-MM-dd').format(date);
+      safePrint("DEBUG: Querying slots for Date: $formattedDate and CID: $_counselorProfileId");
+
+      const query = '''
+        query GetSlots(\$cid: ID!, \$date: String!) {
+          listAppointments(filter: { counselorID: { eq: \$cid }, date: { eq: \$date } }) {
+            items {
+              id
+              timeSlot
+              status
+              student {
+                user { name }
+              }
+            }
+          }
+        }
+      ''';
+
+      final req = GraphQLRequest<String>(
+        document: query,
+        variables: {'cid': _counselorProfileId, 'date': formattedDate},
+        authorizationMode: APIAuthorizationType.userPools,
+      );
+
+      safePrint("DEBUG: Sending Appointments Query...");
+      final res = await Amplify.API.query(request: req).response;
+
+      if (res.hasErrors) {
+        safePrint("DEBUG: Appointments Query Errors: ${res.errors}");
+      }
+
+      List<TimeSlot> loadedSlots = [];
+
+      if (res.data != null) {
+        final data = jsonDecode(res.data!);
+        final items = data['listAppointments']['items'] as List;
+        safePrint("DEBUG: Raw Items from DB: $items");
+
+        for (var item in items) {
+          if (item['status'] == 'CANCELLED') continue;
+
+          loadedSlots.add(TimeSlot(
+            id: item['id'],
+            time: item['timeSlot'],
+            status: item['status'],
+            studentName: item['student']?['user']?['name'],
+            isEnabled: true,
+          ));
+        }
+        safePrint("DEBUG: Parsed ${loadedSlots.length} valid slots");
+      } else {
+        safePrint("DEBUG: Appointments Query returned null data");
+      }
+
+      loadedSlots.sort((a, b) => a.time.compareTo(b.time));
+
+      if (mounted) {
+        setState(() {
+          _currentSlots = loadedSlots;
+          _isLoading = false;
+        });
+      }
+
+    } catch (e) {
+      safePrint("DEBUG: Exception in _fetchSlotsForDate: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _deleteSlot(String appointmentId) async {
+    safePrint("DEBUG: Deleting slot $appointmentId");
+    try {
+      const mutation = '''
+        mutation DeleteSlot(\$id: ID!) {
+          deleteAppointment(input: { id: \$id }) { id }
+        }
+      ''';
+      final req = GraphQLRequest<String>(
+        document: mutation,
+        variables: {'id': appointmentId},
+        authorizationMode: APIAuthorizationType.userPools,
+      );
+      final res = await Amplify.API.mutate(request: req).response;
+
+      if(res.hasErrors) {
+        safePrint("DEBUG: Delete Error: ${res.errors}");
+      } else {
+        safePrint("DEBUG: Slot Deleted Successfully");
+        _fetchSlotsForDate(_dates[_selectedDateIndex]);
+      }
+
+    } catch (e) {
+      safePrint("DEBUG: Exception deleting slot: $e");
+    }
+  }
+
+  // ==========================================
+  // 🎨 UI BUILD
+  // ==========================================
 
   @override
   Widget build(BuildContext context) {
-    // Get slots for the currently selected date, default to empty list if loading
-    final currentSlots = _scheduleData[_selectedDateIndex] ?? [];
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text(
-          "My Schedule",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
+        title: const Text("My Schedule", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(
-              Icons.add_circle_outline,
-              color: Color(0xFF3b5998),
-            ),
+            icon: const Icon(Icons.add_circle, color: Color(0xFF3b5998), size: 28),
             onPressed: () {
+              if (_counselorProfileId.isEmpty) {
+                _fetchCounselorId();
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Loading profile... try again in a second.")));
+                return;
+              }
+
               showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
-                // Allows sheet to expand fully if needed
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                ),
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
                 builder: (context) => AddSlotSheet(
-                  selectedDate:
-                      _dates[_selectedDateIndex], // Pass the currently selected date
+                  counselorId: _counselorProfileId,
+                  selectedDate: _dates[_selectedDateIndex],
                 ),
-              );
+              ).then((_) {
+                _fetchSlotsForDate(_dates[_selectedDateIndex]);
+              });
             },
           ),
+          const SizedBox(width: 16),
         ],
       ),
       body: Column(
         children: [
-          // 1. Dynamic Date Picker
           Container(
             height: 85,
             padding: const EdgeInsets.symmetric(vertical: 10),
-            color: Colors.white,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -156,56 +263,25 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               itemBuilder: (context, index) {
                 final date = _dates[index];
                 final isSelected = _selectedDateIndex == index;
-
-                // Format using intl package: "12" and "Mon"
-                final dayNum = DateFormat('d').format(date);
-                final dayName = DateFormat('E').format(date);
-
                 return GestureDetector(
-                  onTap: () => setState(() => _selectedDateIndex = index),
+                  onTap: () {
+                    setState(() => _selectedDateIndex = index);
+                    _fetchSlotsForDate(date);
+                  },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     width: 60,
                     decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFF3b5998)
-                          : Colors.grey[50],
+                      color: isSelected ? const Color(0xFF3b5998) : Colors.grey[50],
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isSelected
-                            ? Colors.transparent
-                            : Colors.grey[200]!,
-                      ),
-                      boxShadow: isSelected
-                          ? [
-                              BoxShadow(
-                                color: const Color(0xFF3b5998).withOpacity(0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ]
-                          : [],
+                      border: Border.all(color: isSelected ? Colors.transparent : Colors.grey[200]!),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          dayNum,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? Colors.white : Colors.black87,
-                          ),
-                        ),
+                        Text(DateFormat('d').format(date), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.black87)),
                         const SizedBox(height: 4),
-                        Text(
-                          dayName,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: isSelected ? Colors.white70 : Colors.grey,
-                          ),
-                        ),
+                        Text(DateFormat('E').format(date), style: TextStyle(fontSize: 12, color: isSelected ? Colors.white70 : Colors.grey)),
                       ],
                     ),
                   ),
@@ -216,144 +292,113 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
           const Divider(height: 1),
 
-          // 2. Dynamic Slots List
           Expanded(
-            child: currentSlots.isEmpty
-                ? const Center(child: Text("No slots available for this day"))
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _currentSlots.isEmpty
+                ? _buildEmptyState()
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: currentSlots.length,
-                    itemBuilder: (context, index) {
-                      final slot = currentSlots[index];
-                      return _buildTimeSlot(slot, index);
-                    },
-                  ),
+              padding: const EdgeInsets.all(16),
+              itemCount: _currentSlots.length,
+              itemBuilder: (context, index) {
+                return _buildTimeSlot(_currentSlots[index]);
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTimeSlot(TimeSlot slot, int index) {
-    Color statusColor;
-    Color bgColor;
-    bool isBreak = slot.status == 'Break';
-    bool isBooked = slot.status == 'Booked';
-
-    // Determine colors based on status
-    if (isBreak) {
-      statusColor = Colors.grey;
-      bgColor = Colors.grey[100]!;
-    } else if (isBooked) {
-      statusColor = const Color(0xFF3b5998);
-      bgColor = Colors.blue[50]!;
-    } else if (slot.isEnabled) {
-      statusColor = Colors.green;
-      bgColor = Colors.green[50]!;
-    } else {
-      // Unavailable state
-      statusColor = Colors.red;
-      bgColor = Colors.red[50]!;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.event_busy, size: 60, color: Colors.grey[300]),
+          const SizedBox(height: 16),
+          Text("No slots added for this day", style: TextStyle(color: Colors.grey[500])),
+          const SizedBox(height: 8),
+          Text("Tap '+' to add availability", style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+          if (_counselorProfileId.isEmpty)
+            const Text("(Profile ID missing)", style: TextStyle(color: Colors.red, fontSize: 10)),
         ],
       ),
-      child: Row(
-        children: [
-          // Time Column
-          SizedBox(
-            width: 80,
-            child: Text(
-              slot.time,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
+    );
+  }
+
+  Widget _buildTimeSlot(TimeSlot slot) {
+    bool isConfirmed = slot.status == 'CONFIRMED';
+    bool isPending = slot.status == 'PENDING';
+    bool isAvailable = slot.status == 'AVAILABLE';
+
+    Color bgColor = Colors.white;
+    Color borderColor = Colors.grey[200]!;
+
+    if (isConfirmed) {
+      bgColor = Colors.blue[50]!;
+      borderColor = Colors.blue[100]!;
+    } else if (isPending) {
+      bgColor = Colors.orange[50]!;
+      borderColor = Colors.orange[100]!;
+    }
+
+    return Dismissible(
+      key: Key(slot.id),
+      direction: isAvailable ? DismissDirection.endToStart : DismissDirection.none,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.red[50],
+        child: const Icon(Icons.delete, color: Colors.red),
+      ),
+      onDismissed: (_) => _deleteSlot(slot.id),
+      child: GestureDetector(
+        onTap: (isConfirmed || isPending) ? () {
+          Navigator.push(context, MaterialPageRoute(
+              builder: (context) => SessionDetailsScreen(appointmentId: slot.id)
+          ));
+        } : null,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: borderColor),
           ),
-
-          // Vertical Divider
-          Container(height: 30, width: 2, color: Colors.grey[200]),
-          const SizedBox(width: 16),
-
-          // Details Column
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    slot.status.toUpperCase(),
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 10,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-                if (slot.studentName != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    slot.studentName!,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          // Actions
-          if (isBooked)
-            IconButton(
-              icon: const Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: Colors.grey,
+          child: Row(
+            children: [
+              const Icon(Icons.access_time, size: 18, color: Colors.grey),
+              const SizedBox(width: 12),
+              Text(
+                slot.time,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
-              onPressed: () {
-                // Navigate to session details
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => SessionDetailsScreen(
-                      studentName: slot.studentName ?? "Unknown",
-                      time: slot.time,
-                    ),
-                  ),
-                );
-              },
-            )
-          else if (!isBreak)
-            Switch(
-              value: slot.isEnabled,
-              activeColor: Colors.green,
-              inactiveTrackColor: Colors.red[100],
-              inactiveThumbColor: Colors.red,
-              onChanged: (val) => _toggleSlotAvailability(index, val),
-            ),
-        ],
+              const Spacer(),
+
+              if (isConfirmed) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+                  child: Text(slot.studentName ?? "Booked", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF3b5998))),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF3b5998)),
+              ] else if (isPending) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+                  child: const Text("Request", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange)),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.circle, size: 10, color: Colors.orange),
+              ] else ...[
+                const Text("Available", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+              ]
+            ],
+          ),
+        ),
       ),
     );
   }
