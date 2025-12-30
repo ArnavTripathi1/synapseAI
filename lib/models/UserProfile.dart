@@ -21,6 +21,7 @@
 
 import 'ModelProvider.dart';
 import 'package:amplify_core/amplify_core.dart' as amplify_core;
+import 'package:collection/collection.dart';
 
 
 /** This is an auto generated class representing the UserProfile type in your schema. */
@@ -29,10 +30,15 @@ class UserProfile extends amplify_core.Model {
   final String id;
   final String? _name;
   final UserRole? _role;
-  final int? _age;
-  final String? _hobby;
+  final String? _imageUrl;
+  final String? _phoneNumber;
+  final StudentProfile? _studentProfile;
+  final CounselorProfile? _counselorProfile;
+  final List<ChatRoomUser>? _chatRooms;
   final amplify_core.TemporalDateTime? _createdAt;
   final amplify_core.TemporalDateTime? _updatedAt;
+  final String? _userProfileStudentProfileId;
+  final String? _userProfileCounselorProfileId;
 
   @override
   getInstanceType() => classType;
@@ -73,12 +79,24 @@ class UserProfile extends amplify_core.Model {
     }
   }
   
-  int? get age {
-    return _age;
+  String? get imageUrl {
+    return _imageUrl;
   }
   
-  String? get hobby {
-    return _hobby;
+  String? get phoneNumber {
+    return _phoneNumber;
+  }
+  
+  StudentProfile? get studentProfile {
+    return _studentProfile;
+  }
+  
+  CounselorProfile? get counselorProfile {
+    return _counselorProfile;
+  }
+  
+  List<ChatRoomUser>? get chatRooms {
+    return _chatRooms;
   }
   
   amplify_core.TemporalDateTime? get createdAt {
@@ -89,15 +107,28 @@ class UserProfile extends amplify_core.Model {
     return _updatedAt;
   }
   
-  const UserProfile._internal({required this.id, required name, required role, age, hobby, createdAt, updatedAt}): _name = name, _role = role, _age = age, _hobby = hobby, _createdAt = createdAt, _updatedAt = updatedAt;
+  String? get userProfileStudentProfileId {
+    return _userProfileStudentProfileId;
+  }
   
-  factory UserProfile({String? id, required String name, required UserRole role, int? age, String? hobby}) {
+  String? get userProfileCounselorProfileId {
+    return _userProfileCounselorProfileId;
+  }
+  
+  const UserProfile._internal({required this.id, required name, required role, imageUrl, phoneNumber, studentProfile, counselorProfile, chatRooms, createdAt, updatedAt, userProfileStudentProfileId, userProfileCounselorProfileId}): _name = name, _role = role, _imageUrl = imageUrl, _phoneNumber = phoneNumber, _studentProfile = studentProfile, _counselorProfile = counselorProfile, _chatRooms = chatRooms, _createdAt = createdAt, _updatedAt = updatedAt, _userProfileStudentProfileId = userProfileStudentProfileId, _userProfileCounselorProfileId = userProfileCounselorProfileId;
+  
+  factory UserProfile({String? id, required String name, required UserRole role, String? imageUrl, String? phoneNumber, StudentProfile? studentProfile, CounselorProfile? counselorProfile, List<ChatRoomUser>? chatRooms, String? userProfileStudentProfileId, String? userProfileCounselorProfileId}) {
     return UserProfile._internal(
       id: id == null ? amplify_core.UUID.getUUID() : id,
       name: name,
       role: role,
-      age: age,
-      hobby: hobby);
+      imageUrl: imageUrl,
+      phoneNumber: phoneNumber,
+      studentProfile: studentProfile,
+      counselorProfile: counselorProfile,
+      chatRooms: chatRooms != null ? List<ChatRoomUser>.unmodifiable(chatRooms) : chatRooms,
+      userProfileStudentProfileId: userProfileStudentProfileId,
+      userProfileCounselorProfileId: userProfileCounselorProfileId);
   }
   
   bool equals(Object other) {
@@ -111,8 +142,13 @@ class UserProfile extends amplify_core.Model {
       id == other.id &&
       _name == other._name &&
       _role == other._role &&
-      _age == other._age &&
-      _hobby == other._hobby;
+      _imageUrl == other._imageUrl &&
+      _phoneNumber == other._phoneNumber &&
+      _studentProfile == other._studentProfile &&
+      _counselorProfile == other._counselorProfile &&
+      DeepCollectionEquality().equals(_chatRooms, other._chatRooms) &&
+      _userProfileStudentProfileId == other._userProfileStudentProfileId &&
+      _userProfileCounselorProfileId == other._userProfileCounselorProfileId;
   }
   
   @override
@@ -126,36 +162,53 @@ class UserProfile extends amplify_core.Model {
     buffer.write("id=" + "$id" + ", ");
     buffer.write("name=" + "$_name" + ", ");
     buffer.write("role=" + (_role != null ? amplify_core.enumToString(_role)! : "null") + ", ");
-    buffer.write("age=" + (_age != null ? _age!.toString() : "null") + ", ");
-    buffer.write("hobby=" + "$_hobby" + ", ");
+    buffer.write("imageUrl=" + "$_imageUrl" + ", ");
+    buffer.write("phoneNumber=" + "$_phoneNumber" + ", ");
     buffer.write("createdAt=" + (_createdAt != null ? _createdAt!.format() : "null") + ", ");
-    buffer.write("updatedAt=" + (_updatedAt != null ? _updatedAt!.format() : "null"));
+    buffer.write("updatedAt=" + (_updatedAt != null ? _updatedAt!.format() : "null") + ", ");
+    buffer.write("userProfileStudentProfileId=" + "$_userProfileStudentProfileId" + ", ");
+    buffer.write("userProfileCounselorProfileId=" + "$_userProfileCounselorProfileId");
     buffer.write("}");
     
     return buffer.toString();
   }
   
-  UserProfile copyWith({String? name, UserRole? role, int? age, String? hobby}) {
+  UserProfile copyWith({String? name, UserRole? role, String? imageUrl, String? phoneNumber, StudentProfile? studentProfile, CounselorProfile? counselorProfile, List<ChatRoomUser>? chatRooms, String? userProfileStudentProfileId, String? userProfileCounselorProfileId}) {
     return UserProfile._internal(
       id: id,
       name: name ?? this.name,
       role: role ?? this.role,
-      age: age ?? this.age,
-      hobby: hobby ?? this.hobby);
+      imageUrl: imageUrl ?? this.imageUrl,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      studentProfile: studentProfile ?? this.studentProfile,
+      counselorProfile: counselorProfile ?? this.counselorProfile,
+      chatRooms: chatRooms ?? this.chatRooms,
+      userProfileStudentProfileId: userProfileStudentProfileId ?? this.userProfileStudentProfileId,
+      userProfileCounselorProfileId: userProfileCounselorProfileId ?? this.userProfileCounselorProfileId);
   }
   
   UserProfile copyWithModelFieldValues({
     ModelFieldValue<String>? name,
     ModelFieldValue<UserRole>? role,
-    ModelFieldValue<int?>? age,
-    ModelFieldValue<String?>? hobby
+    ModelFieldValue<String?>? imageUrl,
+    ModelFieldValue<String?>? phoneNumber,
+    ModelFieldValue<StudentProfile?>? studentProfile,
+    ModelFieldValue<CounselorProfile?>? counselorProfile,
+    ModelFieldValue<List<ChatRoomUser>?>? chatRooms,
+    ModelFieldValue<String?>? userProfileStudentProfileId,
+    ModelFieldValue<String?>? userProfileCounselorProfileId
   }) {
     return UserProfile._internal(
       id: id,
       name: name == null ? this.name : name.value,
       role: role == null ? this.role : role.value,
-      age: age == null ? this.age : age.value,
-      hobby: hobby == null ? this.hobby : hobby.value
+      imageUrl: imageUrl == null ? this.imageUrl : imageUrl.value,
+      phoneNumber: phoneNumber == null ? this.phoneNumber : phoneNumber.value,
+      studentProfile: studentProfile == null ? this.studentProfile : studentProfile.value,
+      counselorProfile: counselorProfile == null ? this.counselorProfile : counselorProfile.value,
+      chatRooms: chatRooms == null ? this.chatRooms : chatRooms.value,
+      userProfileStudentProfileId: userProfileStudentProfileId == null ? this.userProfileStudentProfileId : userProfileStudentProfileId.value,
+      userProfileCounselorProfileId: userProfileCounselorProfileId == null ? this.userProfileCounselorProfileId : userProfileCounselorProfileId.value
     );
   }
   
@@ -163,31 +216,72 @@ class UserProfile extends amplify_core.Model {
     : id = json['id'],
       _name = json['name'],
       _role = amplify_core.enumFromString<UserRole>(json['role'], UserRole.values),
-      _age = (json['age'] as num?)?.toInt(),
-      _hobby = json['hobby'],
+      _imageUrl = json['imageUrl'],
+      _phoneNumber = json['phoneNumber'],
+      _studentProfile = json['studentProfile'] != null
+        ? json['studentProfile']['serializedData'] != null
+          ? StudentProfile.fromJson(new Map<String, dynamic>.from(json['studentProfile']['serializedData']))
+          : StudentProfile.fromJson(new Map<String, dynamic>.from(json['studentProfile']))
+        : null,
+      _counselorProfile = json['counselorProfile'] != null
+        ? json['counselorProfile']['serializedData'] != null
+          ? CounselorProfile.fromJson(new Map<String, dynamic>.from(json['counselorProfile']['serializedData']))
+          : CounselorProfile.fromJson(new Map<String, dynamic>.from(json['counselorProfile']))
+        : null,
+      _chatRooms = json['chatRooms']  is Map
+        ? (json['chatRooms']['items'] is List
+          ? (json['chatRooms']['items'] as List)
+              .where((e) => e != null)
+              .map((e) => ChatRoomUser.fromJson(new Map<String, dynamic>.from(e)))
+              .toList()
+          : null)
+        : (json['chatRooms'] is List
+          ? (json['chatRooms'] as List)
+              .where((e) => e?['serializedData'] != null)
+              .map((e) => ChatRoomUser.fromJson(new Map<String, dynamic>.from(e?['serializedData'])))
+              .toList()
+          : null),
       _createdAt = json['createdAt'] != null ? amplify_core.TemporalDateTime.fromString(json['createdAt']) : null,
-      _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null;
+      _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null,
+      _userProfileStudentProfileId = json['userProfileStudentProfileId'],
+      _userProfileCounselorProfileId = json['userProfileCounselorProfileId'];
   
   Map<String, dynamic> toJson() => {
-    'id': id, 'name': _name, 'role': amplify_core.enumToString(_role), 'age': _age, 'hobby': _hobby, 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
+    'id': id, 'name': _name, 'role': amplify_core.enumToString(_role), 'imageUrl': _imageUrl, 'phoneNumber': _phoneNumber, 'studentProfile': _studentProfile?.toJson(), 'counselorProfile': _counselorProfile?.toJson(), 'chatRooms': _chatRooms?.map((ChatRoomUser? e) => e?.toJson()).toList(), 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format(), 'userProfileStudentProfileId': _userProfileStudentProfileId, 'userProfileCounselorProfileId': _userProfileCounselorProfileId
   };
   
   Map<String, Object?> toMap() => {
     'id': id,
     'name': _name,
     'role': _role,
-    'age': _age,
-    'hobby': _hobby,
+    'imageUrl': _imageUrl,
+    'phoneNumber': _phoneNumber,
+    'studentProfile': _studentProfile,
+    'counselorProfile': _counselorProfile,
+    'chatRooms': _chatRooms,
     'createdAt': _createdAt,
-    'updatedAt': _updatedAt
+    'updatedAt': _updatedAt,
+    'userProfileStudentProfileId': _userProfileStudentProfileId,
+    'userProfileCounselorProfileId': _userProfileCounselorProfileId
   };
 
   static final amplify_core.QueryModelIdentifier<UserProfileModelIdentifier> MODEL_IDENTIFIER = amplify_core.QueryModelIdentifier<UserProfileModelIdentifier>();
   static final ID = amplify_core.QueryField(fieldName: "id");
   static final NAME = amplify_core.QueryField(fieldName: "name");
   static final ROLE = amplify_core.QueryField(fieldName: "role");
-  static final AGE = amplify_core.QueryField(fieldName: "age");
-  static final HOBBY = amplify_core.QueryField(fieldName: "hobby");
+  static final IMAGEURL = amplify_core.QueryField(fieldName: "imageUrl");
+  static final PHONENUMBER = amplify_core.QueryField(fieldName: "phoneNumber");
+  static final STUDENTPROFILE = amplify_core.QueryField(
+    fieldName: "studentProfile",
+    fieldType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.model, ofModelName: 'StudentProfile'));
+  static final COUNSELORPROFILE = amplify_core.QueryField(
+    fieldName: "counselorProfile",
+    fieldType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.model, ofModelName: 'CounselorProfile'));
+  static final CHATROOMS = amplify_core.QueryField(
+    fieldName: "chatRooms",
+    fieldType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.model, ofModelName: 'ChatRoomUser'));
+  static final USERPROFILESTUDENTPROFILEID = amplify_core.QueryField(fieldName: "userProfileStudentProfileId");
+  static final USERPROFILECOUNSELORPROFILEID = amplify_core.QueryField(fieldName: "userProfileCounselorProfileId");
   static var schema = amplify_core.Model.defineSchema(define: (amplify_core.ModelSchemaDefinition modelSchemaDefinition) {
     modelSchemaDefinition.name = "UserProfile";
     modelSchemaDefinition.pluralName = "UserProfiles";
@@ -202,6 +296,11 @@ class UserProfile extends amplify_core.Model {
           amplify_core.ModelOperation.CREATE,
           amplify_core.ModelOperation.UPDATE,
           amplify_core.ModelOperation.DELETE,
+          amplify_core.ModelOperation.READ
+        ]),
+      amplify_core.AuthRule(
+        authStrategy: amplify_core.AuthStrategy.PRIVATE,
+        operations: const [
           amplify_core.ModelOperation.READ
         ])
     ];
@@ -221,15 +320,36 @@ class UserProfile extends amplify_core.Model {
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: UserProfile.AGE,
+      key: UserProfile.IMAGEURL,
       isRequired: false,
-      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.int)
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: UserProfile.HOBBY,
+      key: UserProfile.PHONENUMBER,
       isRequired: false,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.hasOne(
+      key: UserProfile.STUDENTPROFILE,
+      isRequired: false,
+      ofModelName: 'StudentProfile',
+      associatedKey: StudentProfile.ID
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.hasOne(
+      key: UserProfile.COUNSELORPROFILE,
+      isRequired: false,
+      ofModelName: 'CounselorProfile',
+      associatedKey: CounselorProfile.ID
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.hasMany(
+      key: UserProfile.CHATROOMS,
+      isRequired: false,
+      ofModelName: 'ChatRoomUser',
+      associatedKey: ChatRoomUser.USER
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.nonQueryField(
@@ -244,6 +364,18 @@ class UserProfile extends amplify_core.Model {
       isRequired: false,
       isReadOnly: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.dateTime)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: UserProfile.USERPROFILESTUDENTPROFILEID,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: UserProfile.USERPROFILECOUNSELORPROFILEID,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
   });
 }
