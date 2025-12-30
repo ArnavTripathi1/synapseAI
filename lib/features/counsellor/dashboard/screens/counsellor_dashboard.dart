@@ -38,18 +38,14 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
   }
 
   // ==========================================
-  // 🚀 BACKEND LOGIC (FIXED QUERY STRATEGY)
+  // 🚀 BACKEND LOGIC
   // ==========================================
 
   Future<void> _fetchDashboardData() async {
     try {
       final user = await Amplify.Auth.getCurrentUser();
 
-      // ---------------------------------------------------------
-      // 1. FETCH PROFILE (DIRECT LOOKUP)
-      // Instead of relying on UserProfile linkage, we find the
-      // CounselorProfile that has this userProfileID.
-      // ---------------------------------------------------------
+      // 1. FETCH PROFILE
       const String profileQuery = '''
         query GetMyCounselorProfile(\$uid: ID!) {
           listCounselorProfiles(filter: { userProfileID: { eq: \$uid } }) {
@@ -74,7 +70,6 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
       final profileRes = await Amplify.API.query(request: profileReq).response;
 
       if (profileRes.data == null) {
-        safePrint("Profile Fetch Error: ${profileRes.errors}");
         if (mounted) setState(() => _isLoading = false);
         return;
       }
@@ -83,25 +78,15 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
       final items = profileData['listCounselorProfiles']['items'] as List;
 
       if (items.isEmpty) {
-        safePrint("No Counselor Profile found for User ID: ${user.userId}");
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Profile not found. Please log in again."))
-          );
-        }
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      // We found the profile!
       final counselorProfile = items[0];
-      final userProfile = counselorProfile['user']; // Nested user data
-
+      final userProfile = counselorProfile['user'];
       _counselorProfileId = counselorProfile['id'];
 
-      // ---------------------------------------------------------
-      // 2. FETCH APPOINTMENTS
-      // ---------------------------------------------------------
+      // 2. FETCH APPOINTMENTS (Using Broad Fetch + Client Filter)
       const String apptQuery = '''
         query ListCounselorAppointments(\$cid: ID!) {
           listAppointments(filter: { counselorID: { eq: \$cid } }) {
@@ -137,9 +122,7 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
       final apptData = jsonDecode(apptRes.data!);
       final List<dynamic> allAppts = apptData['listAppointments']['items'];
 
-      // ---------------------------------------------------------
       // 3. PROCESS DATA
-      // ---------------------------------------------------------
       final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
       int pCount = 0;
       int tCount = 0;
@@ -164,7 +147,6 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
         }
       }
 
-      // Sort lists
       upcoming.sort((a, b) => a['date'].compareTo(b['date']));
       requests.sort((a, b) => a['date'].compareTo(b['date']));
 
@@ -188,19 +170,69 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
     }
   }
 
-  Future<void> _toggleOnlineStatus(bool val) async {
-    setState(() => _isOnline = val);
+  // ✅ ADDED: Update Status Logic
+  Future<void> _updateRequestStatus(String appointmentId, bool isAccepted) async {
+    // Optimistic Update
+    setState(() {
+      _pendingRequests.removeWhere((appt) => appt['id'] == appointmentId);
+      _pendingCount = _pendingRequests.length;
+    });
 
     try {
+      final newStatus = isAccepted ? "CONFIRMED" : "CANCELLED";
+
       const String mutation = '''
-        mutation UpdateStatus(\$id: ID!, \$isOnline: Boolean!) {
-          updateCounselorProfile(input: { id: \$id, isOnline: \$isOnline }) {
+        mutation UpdateAppointmentStatus(\$id: ID!, \$status: AppointmentStatus!) {
+          updateAppointment(input: { id: \$id, status: \$status }) {
             id
-            isOnline
+            status
           }
         }
       ''';
 
+      final request = GraphQLRequest<String>(
+        document: mutation,
+        variables: {
+          'id': appointmentId,
+          'status': newStatus,
+        },
+        authorizationMode: APIAuthorizationType.userPools,
+      );
+
+      final response = await Amplify.API.mutate(request: request).response;
+
+      if (response.hasErrors) {
+        _fetchDashboardData(); // Revert on error
+        if(mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${response.errors.first.message}")));
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isAccepted ? "Session Confirmed" : "Request Declined"),
+              backgroundColor: isAccepted ? Colors.green : Colors.red,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(milliseconds: 1500),
+            ),
+          );
+          _fetchDashboardData(); // Refresh to update upcoming lists
+        }
+      }
+    } catch (e) {
+      safePrint("Error updating status: $e");
+      _fetchDashboardData();
+    }
+  }
+
+  Future<void> _toggleOnlineStatus(bool val) async {
+    setState(() => _isOnline = val);
+    try {
+      const String mutation = '''
+        mutation UpdateStatus(\$id: ID!, \$isOnline: Boolean!) {
+          updateCounselorProfile(input: { id: \$id, isOnline: \$isOnline }) { id }
+        }
+      ''';
       final req = GraphQLRequest<String>(
         document: mutation,
         variables: {'id': _counselorProfileId, 'isOnline': val},
@@ -208,13 +240,12 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
       );
       await Amplify.API.mutate(request: req).response;
     } catch (e) {
-      safePrint("Error toggling status: $e");
       if (mounted) setState(() => _isOnline = !val);
     }
   }
 
   // ==========================================
-  // 🎨 UI BUILD (UNCHANGED)
+  // 🎨 UI BUILD
   // ==========================================
 
   @override
@@ -290,10 +321,13 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
 
               ..._pendingRequests.take(3).map((appt) {
                 final studentName = appt['student']?['user']?['name'] ?? "Unknown";
+
                 return RequestCard(
                   name: studentName,
                   issue: appt['topic'] ?? "General",
                   timeRequested: "${appt['date']} @ ${appt['timeSlot']}",
+                  onAccept: () => _updateRequestStatus(appt['id'], true),
+                  onDecline: () => _updateRequestStatus(appt['id'], false),
                 );
               }),
 
@@ -375,19 +409,12 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-        ),
+        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
         InkWell(
           onTap: onSeeAll,
-          borderRadius: BorderRadius.circular(8),
           child: const Padding(
             padding: EdgeInsets.all(4.0),
-            child: Text(
-              "See All",
-              style: TextStyle(color: Color(0xFF3b5998), fontWeight: FontWeight.w600),
-            ),
+            child: Text("See All", style: TextStyle(color: Color(0xFF3b5998), fontWeight: FontWeight.w600)),
           ),
         ),
       ],
@@ -401,9 +428,7 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, spreadRadius: 2),
-          ],
+          boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, spreadRadius: 2)],
         ),
         child: Column(
           children: [
@@ -417,13 +442,11 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
   }
 }
 
-// --- Reused Widgets (Keep Same) ---
-class SessionCard extends StatelessWidget {
-  final String name;
-  final String time;
-  final String issue;
-  final bool isLive;
+// --- WIDGETS ---
 
+class SessionCard extends StatelessWidget {
+  final String name, time, issue;
+  final bool isLive;
   const SessionCard({super.key, required this.name, required this.time, required this.issue, this.isLive = false});
 
   @override
@@ -449,36 +472,23 @@ class SessionCard extends StatelessWidget {
                   children: [
                     Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(color: const Color(0xFF3b5998).withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                      child: Text(issue, style: const TextStyle(fontSize: 10, color: Color(0xFF3b5998), fontWeight: FontWeight.bold)),
-                    ),
+                    Text(issue, style: const TextStyle(fontSize: 12, color: Color(0xFF3b5998), fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
-              const Icon(Icons.access_time_rounded, size: 16, color: Colors.grey),
             ],
           ),
-          const SizedBox(height: 16),
-          const Divider(height: 1),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(time, style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500)),
-              ElevatedButton.icon(
-                onPressed: () {},
-                icon: Icon(isLive ? Icons.videocam : Icons.videocam_off, size: 16, color: isLive ? Colors.white : Colors.grey[600]),
-                label: Text(isLive ? "Join Now" : "Wait"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isLive ? Colors.redAccent : Colors.grey[200],
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  minimumSize: const Size(0, 36),
-                ),
-              )
+              if(isLive)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)),
+                  child: const Text("Join Now", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                )
             ],
           )
         ],
@@ -487,9 +497,20 @@ class SessionCard extends StatelessWidget {
   }
 }
 
+// ✅ UPDATED RequestCard with Callbacks
 class RequestCard extends StatelessWidget {
   final String name, issue, timeRequested;
-  const RequestCard({super.key, required this.name, required this.issue, required this.timeRequested});
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  const RequestCard({
+    super.key,
+    required this.name,
+    required this.issue,
+    required this.timeRequested,
+    required this.onAccept,
+    required this.onDecline,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -500,18 +521,20 @@ class RequestCard extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 4),
-              Text("$issue • $timeRequested", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 4),
+                Text("$issue • $timeRequested", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+              ],
+            ),
           ),
           Row(
             children: [
-              IconButton(onPressed: () {}, icon: const Icon(Icons.close, color: Colors.red)),
-              IconButton(onPressed: () {}, icon: const Icon(Icons.check, color: Colors.green)),
+              IconButton(onPressed: onDecline, icon: const Icon(Icons.close, color: Colors.red)),
+              IconButton(onPressed: onAccept, icon: const Icon(Icons.check, color: Colors.green)),
             ],
           )
         ],
