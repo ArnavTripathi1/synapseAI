@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   amplify_db_common
   connectivity_plus
   flutter_inappwebview_windows
+  flutter_tts
   url_launcher_windows
 )
 
