@@ -189,3 +189,29 @@ type Resource
   thumbnailUrl: String
   isFeatured: Boolean
 }
+
+# 9. AI Chat History
+type AIChatSession
+@model
+@auth(rules: [{ allow: owner }]) {
+  id: ID!
+  title: String! # e.g. "Anxiety Help" (Generated from first prompt)
+
+  # Relationship
+  messages: [AIChatMessage] @hasMany(indexName: "bySession", fields: ["id"])
+
+  # For sorting the sidebar
+  updatedAt: AWSDateTime
+  createdAt: AWSDateTime
+}
+
+type AIChatMessage
+@model
+@auth(rules: [{ allow: owner }]) {
+  id: ID!
+  sessionID: ID! @index(name: "bySession", sortKeyFields: ["createdAt"])
+
+  content: String!
+  isUser: Boolean! # true = User, false = AI
+  createdAt: AWSDateTime!
+}
