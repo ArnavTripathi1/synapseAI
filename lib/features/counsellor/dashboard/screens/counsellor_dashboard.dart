@@ -1,15 +1,16 @@
 import 'dart:convert';
+
 import 'package:amplify_flutter/amplify_flutter.dart';
-import 'package:amplify_api/amplify_api.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:synapse/features/counsellor/dashboard/screens/all_requests_screen.dart';
 
-import '../../schedule/screens/session_details_screen.dart';
-
+// --- NAVIGATIONS ---
+import '../../resources/resources_screen.dart';
+import '../../schedule/screens/session_details_screen.dart'; // Ensure this file exists
+import 'all_requests_screen.dart'; // Ensure this file exists
 
 class CounsellorDashboard extends StatefulWidget {
-  final Function(int) onSwitchTab;
+  final Function(int) onSwitchTab; // Function to switch bottom tabs
 
   const CounsellorDashboard({super.key, required this.onSwitchTab});
 
@@ -18,15 +19,21 @@ class CounsellorDashboard extends StatefulWidget {
 }
 
 class _CounsellorDashboardState extends State<CounsellorDashboard> {
-  // ... (Keep existing State Variables & initState) ...
+  // --- STATE VARIABLES ---
   bool _isLoading = true;
   bool _isOnline = false;
+
+  // Profile Data
   String _counselorProfileId = "";
-  String _counselorName = "Dr. Expert";
-  String _specialization = "Psychologist";
+  String _counselorName = "Loading...";
+  String _specialization = "";
+
+  // Stats
   int _pendingCount = 0;
   int _todayCount = 0;
   int _totalCount = 0;
+
+  // Lists
   List<dynamic> _upcomingSessions = [];
   List<dynamic> _pendingRequests = [];
 
@@ -36,21 +43,12 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
     _fetchDashboardData();
   }
 
-  // ... (Keep existing _fetchDashboardData, _updateRequestStatus, _toggleOnlineStatus logic) ...
-
-  // For brevity, I am not repeating the huge backend logic block here as it remains unchanged.
-  // Just ensure _fetchDashboardData, _updateRequestStatus, etc. are still in your class.
-
-  // ---------------------------------------------------------------------------
-  // COPY PREVIOUS BACKEND LOGIC HERE (methods: _fetchDashboardData, etc.)
-  // ---------------------------------------------------------------------------
+  // --- 1. DATA FETCHING LOGIC ---
   Future<void> _fetchDashboardData() async {
-    // ... (Your existing fetch logic)
-    // Same as provided in your prompt
     try {
       final user = await Amplify.Auth.getCurrentUser();
 
-      // 1. FETCH PROFILE
+      // A. Fetch Counselor Profile
       const String profileQuery = '''
         query GetMyCounselorProfile(\$uid: ID!) {
           listCounselorProfiles(filter: { userProfileID: { eq: \$uid } }) {
@@ -74,24 +72,21 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
       );
       final profileRes = await Amplify.API.query(request: profileReq).response;
 
-      if (profileRes.data == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
+      if (profileRes.data == null) throw Exception("Could not fetch profile");
 
-      final profileData = jsonDecode(profileRes.data!);
-      final items = profileData['listCounselorProfiles']['items'] as List;
-
+      final items =
+          jsonDecode(profileRes.data!)['listCounselorProfiles']['items']
+              as List;
       if (items.isEmpty) {
-        if (mounted) setState(() => _isLoading = false);
+        // Handle case where profile doesn't exist yet
+        setState(() => _isLoading = false);
         return;
       }
 
       final counselorProfile = items[0];
-      final userProfile = counselorProfile['user'];
       _counselorProfileId = counselorProfile['id'];
 
-      // 2. FETCH APPOINTMENTS
+      // B. Fetch Appointments
       const String apptQuery = '''
         query ListCounselorAppointments(\$cid: ID!) {
           listAppointments(filter: { counselorID: { eq: \$cid } }) {
@@ -119,15 +114,13 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
       );
       final apptRes = await Amplify.API.query(request: apptReq).response;
 
-      if (apptRes.data == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
+      if (apptRes.data == null) throw Exception("Could not fetch appointments");
 
-      final apptData = jsonDecode(apptRes.data!);
-      final List<dynamic> allAppts = apptData['listAppointments']['items'];
+      final List<dynamic> allAppts = jsonDecode(
+        apptRes.data!,
+      )['listAppointments']['items'];
 
-      // 3. PROCESS DATA
+      // C. Process Data
       final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
       int pCount = 0;
       int tCount = 0;
@@ -148,16 +141,18 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
 
         if (status == 'CONFIRMED') {
           if (date == todayStr) tCount++;
+          // Add if date is today or future
           if (date.compareTo(todayStr) >= 0) upcoming.add(appt);
         }
       }
 
+      // Sort by date/time
       upcoming.sort((a, b) => a['date'].compareTo(b['date']));
       requests.sort((a, b) => a['date'].compareTo(b['date']));
 
       if (mounted) {
         setState(() {
-          _counselorName = userProfile != null ? userProfile['name'] : "Doctor";
+          _counselorName = counselorProfile['user']['name'] ?? "Counselor";
           _specialization = counselorProfile['specialization'] ?? "Specialist";
           _isOnline = counselorProfile['isOnline'] ?? false;
           _pendingCount = pCount;
@@ -168,17 +163,26 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
           _isLoading = false;
         });
       }
-
     } catch (e) {
-      safePrint("Error fetching dashboard: $e");
+      debugPrint("Dashboard Error: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _updateRequestStatus(String appointmentId, bool isAccepted) async {
-    // ... (Your existing status update logic)
+  // --- 2. ACTIONS ---
+
+  Future<void> _updateRequestStatus(
+    String appointmentId,
+    bool isAccepted,
+  ) async {
+    // Optimistic UI Update
+    final itemIndex = _pendingRequests.indexWhere(
+      (x) => x['id'] == appointmentId,
+    );
+    final item = itemIndex != -1 ? _pendingRequests[itemIndex] : null;
+
     setState(() {
-      _pendingRequests.removeWhere((appt) => appt['id'] == appointmentId);
+      _pendingRequests.removeWhere((x) => x['id'] == appointmentId);
       _pendingCount = _pendingRequests.length;
     });
 
@@ -196,41 +200,38 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
 
       final request = GraphQLRequest<String>(
         document: mutation,
-        variables: {
-          'id': appointmentId,
-          'status': newStatus,
-        },
+        variables: {'id': appointmentId, 'status': newStatus},
         authorizationMode: APIAuthorizationType.userPools,
       );
 
       final response = await Amplify.API.mutate(request: request).response;
 
-      if (response.hasErrors) {
-        _fetchDashboardData(); // Revert on error
-        if(mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${response.errors.first.message}")));
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(isAccepted ? "Session Confirmed" : "Request Declined"),
-              backgroundColor: isAccepted ? Colors.green : Colors.red,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(milliseconds: 1500),
-            ),
-          );
-          _fetchDashboardData(); // Refresh to update upcoming lists
-        }
-      }
-    } catch (e) {
-      safePrint("Error updating status: $e");
+      if (response.hasErrors) throw Exception("GraphQL Error");
+
+      // Refresh to ensure 'upcoming' list gets the new confirmed session
       _fetchDashboardData();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isAccepted ? "Session Confirmed" : "Request Declined"),
+          backgroundColor: isAccepted ? Colors.green : Colors.red,
+        ),
+      );
+    } catch (e) {
+      // Revert Optimistic update if failed
+      if (item != null) {
+        setState(() {
+          _pendingRequests.insert(itemIndex, item);
+          _pendingCount = _pendingRequests.length;
+        });
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
   Future<void> _toggleOnlineStatus(bool val) async {
-    // ... (Your existing toggle logic)
     setState(() => _isOnline = val);
     try {
       const String mutation = '''
@@ -245,12 +246,12 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
       );
       await Amplify.API.mutate(request: req).response;
     } catch (e) {
-      if (mounted) setState(() => _isOnline = !val);
+      setState(() => _isOnline = !val); // Revert on error
     }
   }
 
   // ==========================================
-  // 🎨 UI BUILD
+  // 3. UI BUILD
   // ==========================================
 
   @override
@@ -273,34 +274,45 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Quick Stats
+              // --- A. STATS ROW ---
               Row(
                 children: [
-                  _buildStatCard(title: "Pending", count: "$_pendingCount", color: Colors.orange),
+                  _buildStatCard("Pending", "$_pendingCount", Colors.orange),
                   const SizedBox(width: 12),
-                  _buildStatCard(title: "Today", count: "$_todayCount", color: const Color(0xFF3b5998)),
+                  _buildStatCard(
+                    "Today",
+                    "$_todayCount",
+                    const Color(0xFF3b5998),
+                  ),
                   const SizedBox(width: 12),
-                  _buildStatCard(title: "Total", count: "$_totalCount", color: Colors.blueGrey),
+                  _buildStatCard("Total", "$_totalCount", Colors.blueGrey),
                 ],
               ),
+              const SizedBox(height: 20),
+
+              // --- B. RESOURCE LIBRARY CARD (New!) ---
+              _buildResourceLibraryCard(),
               const SizedBox(height: 30),
 
-              // 2. Upcoming Sessions
+              // --- C. UPCOMING SESSIONS ---
               _buildSectionHeader(
                 "Upcoming Sessions",
-                onSeeAll: () => widget.onSwitchTab(1),
+                () => widget.onSwitchTab(1), // Switch to Calendar Tab
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               if (_upcomingSessions.isEmpty)
                 _buildEmptyState("No upcoming sessions today"),
 
               ..._upcomingSessions.take(3).map((appt) {
-                final studentName = appt['student']?['user']?['name'] ?? "Unknown";
-                final isToday = appt['date'] == DateFormat('yyyy-MM-dd').format(DateTime.now());
+                final studentName =
+                    appt['student']?['user']?['name'] ?? "Unknown";
+                final isToday =
+                    appt['date'] ==
+                    DateFormat('yyyy-MM-dd').format(DateTime.now());
 
                 return SessionCard(
-                  appointmentId: appt['id'], // ✅ PASS ID HERE
+                  appointmentId: appt['id'],
                   name: studentName,
                   time: "${appt['timeSlot']} (${appt['date'].substring(5)})",
                   issue: appt['topic'] ?? "General",
@@ -310,23 +322,22 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
 
               const SizedBox(height: 30),
 
-              // 3. Pending Requests
+              // --- D. PENDING REQUESTS ---
               _buildSectionHeader(
                 "New Requests",
-                onSeeAll: () {
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const AllRequestsScreen())
-                  );
-                },
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AllRequestsScreen()),
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               if (_pendingRequests.isEmpty)
                 _buildEmptyState("No pending requests"),
 
               ..._pendingRequests.take(3).map((appt) {
-                final studentName = appt['student']?['user']?['name'] ?? "Unknown";
+                final studentName =
+                    appt['student']?['user']?['name'] ?? "Unknown";
 
                 return RequestCard(
                   name: studentName,
@@ -337,7 +348,7 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
                 );
               }),
 
-              const SizedBox(height: 80),
+              const SizedBox(height: 60), // Bottom padding
             ],
           ),
         ),
@@ -345,8 +356,9 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
     );
   }
 
+  // --- WIDGET BUILDERS ---
+
   PreferredSizeWidget _buildAppBar() {
-    // ... (Keep existing AppBar logic)
     return AppBar(
       elevation: 0,
       backgroundColor: Colors.white,
@@ -355,23 +367,25 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
         children: [
           Text(
             _counselorName,
-            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 20),
+            style: const TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+            ),
           ),
           Text(
             _specialization,
-            style: TextStyle(color: Colors.grey[600], fontSize: 14, fontWeight: FontWeight.w400),
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+            ),
           ),
         ],
       ),
       actions: [
         Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: _isOnline ? Colors.green[50] : Colors.grey[100],
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _isOnline ? Colors.green : Colors.grey[400]!),
-          ),
+          margin: const EdgeInsets.only(right: 16),
           child: Row(
             children: [
               Text(
@@ -382,6 +396,7 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
                   fontSize: 12,
                 ),
               ),
+              const SizedBox(width: 8),
               Transform.scale(
                 scale: 0.8,
                 child: Switch(
@@ -392,76 +407,178 @@ class _CounsellorDashboardState extends State<CounsellorDashboard> {
               ),
             ],
           ),
-        )
-      ],
-    );
-  }
-
-  Widget _buildEmptyState(String text) {
-    // ... (Keep existing empty state)
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 20),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey[200]!)
-      ),
-      child: Center(
-        child: Text(text, style: TextStyle(color: Colors.grey[400], fontStyle: FontStyle.italic)),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title, {required VoidCallback onSeeAll}) {
-    // ... (Keep existing header)
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-        InkWell(
-          onTap: onSeeAll,
-          child: const Padding(
-            padding: EdgeInsets.all(4.0),
-            child: Text("See All", style: TextStyle(color: Color(0xFF3b5998), fontWeight: FontWeight.w600)),
-          ),
         ),
       ],
     );
   }
 
-  Widget _buildStatCard({required String title, required String count, required Color color}) {
-    // ... (Keep existing stat card)
+  Widget _buildStatCard(String title, String count, Color color) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, spreadRadius: 2)],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.05),
+              blurRadius: 10,
+              spreadRadius: 2,
+            ),
+          ],
         ),
         child: Column(
           children: [
-            Text(count, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+            Text(
+              count,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResourceLibraryCard() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const MyUploadedResourcesScreen(),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3b5998), // Primary Blue
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF3b5998).withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.library_add_check,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Resource Library",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  Text(
+                    "Upload & manage content",
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, VoidCallback onTap) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        InkWell(
+          onTap: onTap,
+          child: const Padding(
+            padding: EdgeInsets.all(4.0),
+            child: Text(
+              "See All",
+              style: TextStyle(
+                color: Color(0xFF3b5998),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(String msg) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Center(
+        child: Text(
+          msg,
+          style: TextStyle(
+            color: Colors.grey[400],
+            fontStyle: FontStyle.italic,
+          ),
         ),
       ),
     );
   }
 }
 
-// --- UPDATED WIDGETS ---
+// =========================================================
+// INTERNAL COMPONENTS (Can be moved to separate files later)
+// =========================================================
 
 class SessionCard extends StatelessWidget {
-  final String appointmentId; // ✅ New Field
+  final String appointmentId;
   final String name, time, issue;
   final bool isLive;
 
   const SessionCard({
     super.key,
-    required this.appointmentId, // ✅ Require ID
+    required this.appointmentId,
     required this.name,
     required this.time,
     required this.issue,
@@ -476,26 +593,50 @@ class SessionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Row(
             children: [
               CircleAvatar(
-                radius: 25,
+                radius: 24,
                 backgroundColor: Colors.grey[200],
-                child: Text(name.isNotEmpty ? name[0] : "?", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                child: Text(
+                  name[0],
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black54,
+                  ),
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(issue, style: const TextStyle(fontSize: 12, color: Color(0xFF3b5998), fontWeight: FontWeight.bold)),
+                    Text(
+                      issue,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF3b5998),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -505,34 +646,52 @@ class SessionCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(time, style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500)),
-
+              Text(
+                time,
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               if (isLive)
-                InkWell( // ✅ WRAPPED IN INKWELL
+                InkWell(
                   onTap: () {
-                    // ✅ NAVIGATE TO DETAILS
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => SessionDetailsScreen(appointmentId: appointmentId),
+                        builder: (_) =>
+                            SessionDetailsScreen(appointmentId: appointmentId),
                       ),
                     );
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)),
-                    child: const Text("Join Now", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      "Join Now",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                )
+                ),
             ],
-          )
+          ),
         ],
       ),
     );
   }
 }
 
-// ... (RequestCard remains unchanged) ...
 class RequestCard extends StatelessWidget {
   final String name, issue, timeRequested;
   final VoidCallback onAccept;
@@ -552,7 +711,11 @@ class RequestCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[200]!)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -560,18 +723,33 @@ class RequestCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text("$issue • $timeRequested", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text(
+                  "$issue • $timeRequested",
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
               ],
             ),
           ),
           Row(
             children: [
-              IconButton(onPressed: onDecline, icon: const Icon(Icons.close, color: Colors.red)),
-              IconButton(onPressed: onAccept, icon: const Icon(Icons.check, color: Colors.green)),
+              IconButton(
+                onPressed: onDecline,
+                icon: const Icon(Icons.close, color: Colors.red),
+              ),
+              IconButton(
+                onPressed: onAccept,
+                icon: const Icon(Icons.check, color: Colors.green),
+              ),
             ],
-          )
+          ),
         ],
       ),
     );

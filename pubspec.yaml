@@ -57,7 +57,9 @@ dependencies:
   lucide_icons_flutter: ^3.1.9
   intl: ^0.20.2
 
+  path_provider: ^2.1.1
   amplify_flutter: ^2.4.0
+  amplify_storage_s3: ^2.4.0
   amplify_auth_cognito: ^2.4.0
   amplify_authenticator: ^2.4.0
   amplify_api: ^2.4.0

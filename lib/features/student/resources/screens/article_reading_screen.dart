@@ -1,8 +1,10 @@
-
+import 'dart:convert';
 import 'dart:io';
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_api/amplify_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
@@ -11,13 +13,17 @@ class ArticleDetailScreen extends StatefulWidget {
   final String category;
   final String readTime;
   final String imageUrl;
+  final String content;
+  final String counselorId; // This is the UserProfile ID of the Counselor
 
   const ArticleDetailScreen({
     super.key,
     required this.title,
     required this.category,
     required this.readTime,
-    this.imageUrl = 'https://img.freepik.com/free-vector/organic-flat-people-meditating-illustration_23-2148906556.jpg',
+    required this.imageUrl,
+    required this.content,
+    required this.counselorId,
   });
 
   @override
@@ -25,54 +31,137 @@ class ArticleDetailScreen extends StatefulWidget {
 }
 
 class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
+  // --- UI STATE ---
   bool isBookmarked = false;
   bool isPlaying = false;
+
+  // --- AUTHOR DATA ---
+  String _authorName = "Loading...";
+  String _authorSpecialization = "";
+  String? _authorImageUrl;
+  bool _isLoadingAuthor = true;
+
+  // --- TTS STATE ---
   final FlutterTts flutterTts = FlutterTts();
-
-  // TRACKING POSITION: Store the index of the last spoken word
   int _lastCharacterIndex = 0;
-
-  final String _articleContent = """
-Anxiety often feels like a storm in your mind—loud, chaotic, and overwhelming. But just like a storm, it passes. The key is finding an anchor while you wait for the skies to clear.
-
-Here are three science-backed grounding techniques you can use right now:
-
-1. The 5-4-3-2-1 Technique. Look around you and identify: 5 things you can see. 4 things you can touch. 3 things you can hear. 2 things you can smell. 1 thing you can taste.
-
-2. Box Breathing. Control your breath, control your nervous system. Inhale for 4 seconds. Hold for 4 seconds. Exhale for 4 seconds. Hold for 4 seconds. Repeat this cycle 4 times.
-
-3. Cold Water Shock. Splash ice-cold water on your face. The intense sensation activates the Mammalian Dive Reflex, which instantly lowers your heart rate.
-""";
+  String _cleanContentForTts = "";
 
   @override
   void initState() {
     super.initState();
+    // 1. Prepare text for speech immediately (strip markdown symbols)
+    _cleanContentForTts = _cleanMarkdownForTTS(widget.content);
+
+    // 2. Initialize TTS engine
     _initTts();
+
+    // 3. Fetch the real author details using the User ID
+    _fetchCounselorDetails();
   }
 
+  // ---------------------------------------------------------------------------
+  // 1. FETCH AUTHOR LOGIC (FIXED)
+  // ---------------------------------------------------------------------------
+  Future<void> _fetchCounselorDetails() async {
+    // We use listCounselorProfiles with a filter because we are searching by userProfileID, not the primary key.
+    const counselorQuery = '''
+      query GetCounselorByUser(\$uid: ID!) {
+        listCounselorProfiles(filter: { userProfileID: { eq: \$uid } }) {
+          items {
+            specialization
+            user {
+              name
+              imageUrl
+            }
+          }
+        }
+      }
+    ''';
+
+    try {
+      final request = GraphQLRequest<String>(
+        document: counselorQuery,
+        variables: {'uid': widget.counselorId},
+        authorizationMode: APIAuthorizationType.userPools,
+      );
+
+      final response = await Amplify.API.query(request: request).response;
+
+      if (mounted) {
+        setState(() {
+          _isLoadingAuthor = false; // Stop loading regardless of result
+
+          if (response.data != null) {
+            final data = jsonDecode(response.data!);
+            final items = data['listCounselorProfiles']['items'] as List;
+
+            if (items.isNotEmpty) {
+              final counselor = items[0];
+              _authorName = counselor['user']['name'] ?? "Unknown Counselor";
+              _authorImageUrl = counselor['user']['imageUrl'];
+              _authorSpecialization = counselor['specialization'] ?? "Wellness Expert";
+            } else {
+              _authorName = "Verified Counselor"; // Fallback if record missing
+            }
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching author: $e");
+      if (mounted) {
+        setState(() {
+          _authorName = "Counselor";
+          _isLoadingAuthor = false;
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. MARKDOWN CLEANER FOR TTS
+  // ---------------------------------------------------------------------------
+  String _cleanMarkdownForTTS(String markdown) {
+    // Replace headers (# Header) with just text
+    String cleaned = markdown.replaceAll(RegExp(r'(^|\n)\s*#+\s*'), ' ');
+
+    // Remove bold/italic markers (**text** or *text*)
+    cleaned = cleaned.replaceAll(RegExp(r'\*\*|__|\*|_'), '');
+
+    // Remove links [text](url) -> keep only 'text'
+    cleaned = cleaned.replaceAllMapped(RegExp(r'\[([^\]]+)\]\([^)]+\)'), (match) {
+      return match.group(1) ?? "";
+    });
+
+    // Remove images ![alt](url) -> remove entirely
+    cleaned = cleaned.replaceAll(RegExp(r'!\[[^\]]*\]\([^)]+\)'), '');
+
+    // Remove blockquotes (>)
+    cleaned = cleaned.replaceAll(RegExp(r'(^|\n)\s*>\s*'), ' ');
+
+    // Remove list bullets (- or *)
+    cleaned = cleaned.replaceAll(RegExp(r'(^|\n)\s*[-*]\s+'), ' ');
+
+    return cleaned.trim();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. TTS SETUP
+  // ---------------------------------------------------------------------------
   void _initTts() async {
     await flutterTts.setLanguage("en-US");
-    await flutterTts.setSpeechRate(0.4);
+    await flutterTts.setSpeechRate(0.5);
     await flutterTts.setVolume(1.0);
-    await flutterTts.setPitch(0.6);
+    await flutterTts.setPitch(1.0);
 
+    if (Platform.isAndroid) await flutterTts.setQueueMode(1);
 
-    if (Platform.isAndroid) {
-      await flutterTts.setQueueMode(1);
-    }
-
-    // 1. PROGRESS HANDLER: This keeps track of where we are in the text
+    // Track progress based on cleaned text
     flutterTts.setProgressHandler((String text, int start, int end, String word) {
-      setState(() {
-        _lastCharacterIndex = start;
-      });
+      setState(() => _lastCharacterIndex = start);
     });
 
-    flutterTts.setStartHandler(() {
-      setState(() => isPlaying = true);
-    });
+    flutterTts.setStartHandler(() => setState(() => isPlaying = true));
 
-    // 2. COMPLETION HANDLER: Reset the index when article finishes
     flutterTts.setCompletionHandler(() {
       setState(() {
         isPlaying = false;
@@ -80,36 +169,24 @@ Here are three science-backed grounding techniques you can use right now:
       });
     });
 
-    flutterTts.setErrorHandler((msg) {
-      setState(() => isPlaying = false);
-      debugPrint("TTS Error: $msg");
-    });
+    flutterTts.setErrorHandler((msg) => setState(() => isPlaying = false));
   }
 
-  // 3. RESUME LOGIC: Speak from a substring if index > 0
-  Future<void> _speak() async {
-    String textToSpeak = _articleContent;
-
-    // If we have a saved position, start from there
-    if (_lastCharacterIndex > 0 && _lastCharacterIndex < _articleContent.length) {
-      textToSpeak = _articleContent.substring(_lastCharacterIndex);
-    }
-
-    var result = await flutterTts.speak(textToSpeak);
-    if (result == 1) setState(() => isPlaying = true);
-  }
-
-  // 4. PAUSE LOGIC: Stop the hardware, but the index is saved in _lastCharacterIndex
-  Future<void> _pause() async {
-    var result = await flutterTts.stop();
-    if (result == 1) setState(() => isPlaying = false);
-  }
-
-  void _togglePlay() {
+  Future<void> _togglePlay() async {
     if (isPlaying) {
-      _pause();
+      await flutterTts.stop();
+      setState(() => isPlaying = false);
     } else {
-      _speak();
+      // ✅ Speak the CLEANED text
+      String textToSpeak = _cleanContentForTts;
+
+      // Resume logic (approximate)
+      if (_lastCharacterIndex > 0 && _lastCharacterIndex < textToSpeak.length) {
+        textToSpeak = textToSpeak.substring(_lastCharacterIndex);
+      }
+
+      var result = await flutterTts.speak(textToSpeak);
+      if (result == 1) setState(() => isPlaying = true);
     }
   }
 
@@ -119,44 +196,41 @@ Here are three science-backed grounding techniques you can use right now:
     super.dispose();
   }
 
+  // ---------------------------------------------------------------------------
+  // 4. UI BUILD
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: CustomScrollView(
         slivers: [
+          // 1. Header Image
           SliverAppBar(
             expandedHeight: 250,
             pinned: true,
             backgroundColor: Colors.white,
             elevation: 0,
             leading: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_back, color: Colors.black87, size: 20),
-              ),
+              icon: const CircleAvatar(backgroundColor: Colors.white70, child: Icon(Icons.arrow_back, color: Colors.black)),
               onPressed: () => Navigator.pop(context),
             ),
             actions: [
               IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), shape: BoxShape.circle),
-                  child: Icon(
-                    isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                    color: isBookmarked ? Colors.teal : Colors.black87,
-                    size: 20,
-                  ),
+                icon: CircleAvatar(
+                    backgroundColor: Colors.white70,
+                    child: Icon(isBookmarked ? Icons.bookmark : Icons.bookmark_border, color: isBookmarked ? Colors.teal : Colors.black)
                 ),
                 onPressed: () => setState(() => isBookmarked = !isBookmarked),
               ),
               const SizedBox(width: 16),
             ],
             flexibleSpace: FlexibleSpaceBar(
-              background: Image.network(widget.imageUrl, fit: BoxFit.cover),
+              background: _buildHeaderImage(),
             ),
           ),
+
+          // 2. Content Body
           SliverToBoxAdapter(
             child: Container(
               padding: const EdgeInsets.all(24),
@@ -168,69 +242,91 @@ Here are three science-backed grounding techniques you can use right now:
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Meta Tags
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFA1C4FD).withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(widget.category.toUpperCase(),
-                            style: GoogleFonts.plusJakartaSans(
-                                fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
-                      ),
+                      _buildCategoryChip(),
                       const SizedBox(width: 12),
-                      Icon(Icons.access_time, size: 14, color: Colors.grey[400]),
+                      const Icon(Icons.access_time, size: 14, color: Colors.grey),
                       const SizedBox(width: 4),
-                      Text(widget.readTime, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey[500])),
+                      Text(widget.readTime, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey)),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(widget.title,
-                      style: GoogleFonts.plusJakartaSans(
-                          fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B), height: 1.2)),
+
+                  // Title
+                  Text(widget.title, style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold, height: 1.2)),
                   const SizedBox(height: 20),
+
+                  // Author & Play Button
                   Row(
                     children: [
-                      const CircleAvatar(
-                          radius: 16, backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=32')),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("Dr. Sarah Jensen",
-                              style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B))),
-                          Text("Clinical Psychologist",
-                              style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey[500])),
-                        ],
+                      // Author Avatar
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: Colors.grey[200],
+                        backgroundImage: _authorImageUrl != null
+                            ? NetworkImage(_authorImageUrl!)
+                            : null,
+                        child: _authorImageUrl == null
+                            ? const Icon(Icons.person, color: Colors.grey)
+                            : null,
                       ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: _togglePlay,
-                        child: AnimatedContainer(
-                          duration: 300.ms,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isPlaying ? const Color(0xFFA1C4FD) : const Color(0xFFF1F5F9),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isPlaying ? Icons.pause : Icons.play_arrow,
-                            color: isPlaying ? Colors.white : const Color(0xFF1E293B),
-                          ),
+                      const SizedBox(width: 12),
+
+                      // Author Text (Dynamic)
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _isLoadingAuthor
+                                ? Container(width: 100, height: 14, color: Colors.grey[100])
+                                : Text(
+                                _authorName,
+                                style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                                maxLines: 1, overflow: TextOverflow.ellipsis
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                                _authorSpecialization,
+                                style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey[500])
+                            ),
+                          ],
                         ),
+                      ),
+
+                      // Play Button
+                      FloatingActionButton.small(
+                        onPressed: _togglePlay,
+                        elevation: 0,
+                        backgroundColor: isPlaying ? const Color(0xFFA1C4FD) : const Color(0xFFF1F5F9),
+                        child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black),
                       ),
                     ],
                   ),
                   const SizedBox(height: 24),
-                  const Divider(height: 1),
+                  const Divider(),
                   const SizedBox(height: 24),
-                  Text(
-                    _articleContent,
-                    style: GoogleFonts.plusJakartaSans(fontSize: 16, height: 1.8, color: const Color(0xFF334155)),
+
+                  // Content (Markdown)
+                  MarkdownBody(
+                    data: widget.content,
+                    selectable: true,
+                    styleSheet: MarkdownStyleSheet(
+                      p: GoogleFonts.plusJakartaSans(fontSize: 16, height: 1.6, color: const Color(0xFF334155)),
+                      h1: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold),
+                      h2: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.bold),
+                      h3: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w600),
+                      listBullet: const TextStyle(color: Color(0xFF3b5998), fontSize: 16),
+                      blockquote: GoogleFonts.plusJakartaSans(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.grey[700]),
+                      blockquoteDecoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                        border: const Border(left: BorderSide(color: Color(0xFF3b5998), width: 4)),
+                      ),
+                    ),
                   ).animate().fadeIn(delay: 300.ms),
+
                   const SizedBox(height: 40),
                 ],
               ),
@@ -240,5 +336,26 @@ Here are three science-backed grounding techniques you can use right now:
       ),
     );
   }
-}
 
+  Widget _buildHeaderImage() {
+    if (widget.imageUrl.startsWith("http")) {
+      return Image.network(widget.imageUrl, fit: BoxFit.cover);
+    } else {
+      return Container(color: Colors.grey[300]);
+    }
+  }
+
+  Widget _buildCategoryChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFA1C4FD).withOpacity(0.2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+          widget.category.toUpperCase(),
+          style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))
+      ),
+    );
+  }
+}

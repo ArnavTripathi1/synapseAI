@@ -24,6 +24,9 @@
           "deploymentBucketName": "amplify-synapse-dev-95f4c-deployment",
           "s3Key": "amplify-builds/synapseAIChat-4b2b49794a5772325034-build.zip"
         }
+      },
+      "storage": {
+        "synapseS3": {}
       }
     }
   }

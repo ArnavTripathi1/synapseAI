@@ -27,6 +27,7 @@ import 'package:amplify_core/amplify_core.dart' as amplify_core;
 class Resource extends amplify_core.Model {
   static const classType = const _ResourceModelType();
   final String id;
+  final CounselorProfile? _counselor;
   final String? _title;
   final ResourceType? _type;
   final String? _category;
@@ -50,6 +51,10 @@ class Resource extends amplify_core.Model {
       return ResourceModelIdentifier(
         id: id
       );
+  }
+  
+  CounselorProfile? get counselor {
+    return _counselor;
   }
   
   String get title {
@@ -123,11 +128,12 @@ class Resource extends amplify_core.Model {
     return _updatedAt;
   }
   
-  const Resource._internal({required this.id, required title, required type, required category, duration, description, contentBody, url, thumbnailUrl, isFeatured, createdAt, updatedAt}): _title = title, _type = type, _category = category, _duration = duration, _description = description, _contentBody = contentBody, _url = url, _thumbnailUrl = thumbnailUrl, _isFeatured = isFeatured, _createdAt = createdAt, _updatedAt = updatedAt;
+  const Resource._internal({required this.id, counselor, required title, required type, required category, duration, description, contentBody, url, thumbnailUrl, isFeatured, createdAt, updatedAt}): _counselor = counselor, _title = title, _type = type, _category = category, _duration = duration, _description = description, _contentBody = contentBody, _url = url, _thumbnailUrl = thumbnailUrl, _isFeatured = isFeatured, _createdAt = createdAt, _updatedAt = updatedAt;
   
-  factory Resource({String? id, required String title, required ResourceType type, required String category, String? duration, String? description, String? contentBody, String? url, String? thumbnailUrl, bool? isFeatured}) {
+  factory Resource({String? id, CounselorProfile? counselor, required String title, required ResourceType type, required String category, String? duration, String? description, String? contentBody, String? url, String? thumbnailUrl, bool? isFeatured, amplify_core.TemporalDateTime? createdAt}) {
     return Resource._internal(
       id: id == null ? amplify_core.UUID.getUUID() : id,
+      counselor: counselor,
       title: title,
       type: type,
       category: category,
@@ -136,7 +142,8 @@ class Resource extends amplify_core.Model {
       contentBody: contentBody,
       url: url,
       thumbnailUrl: thumbnailUrl,
-      isFeatured: isFeatured);
+      isFeatured: isFeatured,
+      createdAt: createdAt);
   }
   
   bool equals(Object other) {
@@ -148,6 +155,7 @@ class Resource extends amplify_core.Model {
     if (identical(other, this)) return true;
     return other is Resource &&
       id == other.id &&
+      _counselor == other._counselor &&
       _title == other._title &&
       _type == other._type &&
       _category == other._category &&
@@ -156,7 +164,8 @@ class Resource extends amplify_core.Model {
       _contentBody == other._contentBody &&
       _url == other._url &&
       _thumbnailUrl == other._thumbnailUrl &&
-      _isFeatured == other._isFeatured;
+      _isFeatured == other._isFeatured &&
+      _createdAt == other._createdAt;
   }
   
   @override
@@ -168,6 +177,7 @@ class Resource extends amplify_core.Model {
     
     buffer.write("Resource {");
     buffer.write("id=" + "$id" + ", ");
+    buffer.write("counselor=" + (_counselor != null ? _counselor!.toString() : "null") + ", ");
     buffer.write("title=" + "$_title" + ", ");
     buffer.write("type=" + (_type != null ? amplify_core.enumToString(_type)! : "null") + ", ");
     buffer.write("category=" + "$_category" + ", ");
@@ -184,9 +194,10 @@ class Resource extends amplify_core.Model {
     return buffer.toString();
   }
   
-  Resource copyWith({String? title, ResourceType? type, String? category, String? duration, String? description, String? contentBody, String? url, String? thumbnailUrl, bool? isFeatured}) {
+  Resource copyWith({CounselorProfile? counselor, String? title, ResourceType? type, String? category, String? duration, String? description, String? contentBody, String? url, String? thumbnailUrl, bool? isFeatured, amplify_core.TemporalDateTime? createdAt}) {
     return Resource._internal(
       id: id,
+      counselor: counselor ?? this.counselor,
       title: title ?? this.title,
       type: type ?? this.type,
       category: category ?? this.category,
@@ -195,10 +206,12 @@ class Resource extends amplify_core.Model {
       contentBody: contentBody ?? this.contentBody,
       url: url ?? this.url,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
-      isFeatured: isFeatured ?? this.isFeatured);
+      isFeatured: isFeatured ?? this.isFeatured,
+      createdAt: createdAt ?? this.createdAt);
   }
   
   Resource copyWithModelFieldValues({
+    ModelFieldValue<CounselorProfile?>? counselor,
     ModelFieldValue<String>? title,
     ModelFieldValue<ResourceType>? type,
     ModelFieldValue<String>? category,
@@ -207,10 +220,12 @@ class Resource extends amplify_core.Model {
     ModelFieldValue<String?>? contentBody,
     ModelFieldValue<String?>? url,
     ModelFieldValue<String?>? thumbnailUrl,
-    ModelFieldValue<bool?>? isFeatured
+    ModelFieldValue<bool?>? isFeatured,
+    ModelFieldValue<amplify_core.TemporalDateTime?>? createdAt
   }) {
     return Resource._internal(
       id: id,
+      counselor: counselor == null ? this.counselor : counselor.value,
       title: title == null ? this.title : title.value,
       type: type == null ? this.type : type.value,
       category: category == null ? this.category : category.value,
@@ -219,12 +234,18 @@ class Resource extends amplify_core.Model {
       contentBody: contentBody == null ? this.contentBody : contentBody.value,
       url: url == null ? this.url : url.value,
       thumbnailUrl: thumbnailUrl == null ? this.thumbnailUrl : thumbnailUrl.value,
-      isFeatured: isFeatured == null ? this.isFeatured : isFeatured.value
+      isFeatured: isFeatured == null ? this.isFeatured : isFeatured.value,
+      createdAt: createdAt == null ? this.createdAt : createdAt.value
     );
   }
   
   Resource.fromJson(Map<String, dynamic> json)  
     : id = json['id'],
+      _counselor = json['counselor'] != null
+        ? json['counselor']['serializedData'] != null
+          ? CounselorProfile.fromJson(new Map<String, dynamic>.from(json['counselor']['serializedData']))
+          : CounselorProfile.fromJson(new Map<String, dynamic>.from(json['counselor']))
+        : null,
       _title = json['title'],
       _type = amplify_core.enumFromString<ResourceType>(json['type'], ResourceType.values),
       _category = json['category'],
@@ -238,11 +259,12 @@ class Resource extends amplify_core.Model {
       _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null;
   
   Map<String, dynamic> toJson() => {
-    'id': id, 'title': _title, 'type': amplify_core.enumToString(_type), 'category': _category, 'duration': _duration, 'description': _description, 'contentBody': _contentBody, 'url': _url, 'thumbnailUrl': _thumbnailUrl, 'isFeatured': _isFeatured, 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
+    'id': id, 'counselor': _counselor?.toJson(), 'title': _title, 'type': amplify_core.enumToString(_type), 'category': _category, 'duration': _duration, 'description': _description, 'contentBody': _contentBody, 'url': _url, 'thumbnailUrl': _thumbnailUrl, 'isFeatured': _isFeatured, 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
   };
   
   Map<String, Object?> toMap() => {
     'id': id,
+    'counselor': _counselor,
     'title': _title,
     'type': _type,
     'category': _category,
@@ -258,6 +280,9 @@ class Resource extends amplify_core.Model {
 
   static final amplify_core.QueryModelIdentifier<ResourceModelIdentifier> MODEL_IDENTIFIER = amplify_core.QueryModelIdentifier<ResourceModelIdentifier>();
   static final ID = amplify_core.QueryField(fieldName: "id");
+  static final COUNSELOR = amplify_core.QueryField(
+    fieldName: "counselor",
+    fieldType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.model, ofModelName: 'CounselorProfile'));
   static final TITLE = amplify_core.QueryField(fieldName: "title");
   static final TYPE = amplify_core.QueryField(fieldName: "type");
   static final CATEGORY = amplify_core.QueryField(fieldName: "category");
@@ -267,6 +292,7 @@ class Resource extends amplify_core.Model {
   static final URL = amplify_core.QueryField(fieldName: "url");
   static final THUMBNAILURL = amplify_core.QueryField(fieldName: "thumbnailUrl");
   static final ISFEATURED = amplify_core.QueryField(fieldName: "isFeatured");
+  static final CREATEDAT = amplify_core.QueryField(fieldName: "createdAt");
   static var schema = amplify_core.Model.defineSchema(define: (amplify_core.ModelSchemaDefinition modelSchemaDefinition) {
     modelSchemaDefinition.name = "Resource";
     modelSchemaDefinition.pluralName = "Resources";
@@ -286,10 +312,31 @@ class Resource extends amplify_core.Model {
           amplify_core.ModelOperation.CREATE,
           amplify_core.ModelOperation.UPDATE,
           amplify_core.ModelOperation.DELETE
+        ]),
+      amplify_core.AuthRule(
+        authStrategy: amplify_core.AuthStrategy.OWNER,
+        ownerField: "counselorID",
+        identityClaim: "cognito:username",
+        provider: amplify_core.AuthRuleProvider.USERPOOLS,
+        operations: const [
+          amplify_core.ModelOperation.CREATE,
+          amplify_core.ModelOperation.UPDATE,
+          amplify_core.ModelOperation.DELETE
         ])
     ];
     
+    modelSchemaDefinition.indexes = [
+      amplify_core.ModelIndex(fields: const ["counselorID", "createdAt"], name: "byCounselor")
+    ];
+    
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.id());
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.belongsTo(
+      key: Resource.COUNSELOR,
+      isRequired: false,
+      targetNames: ['counselorID'],
+      ofModelName: 'CounselorProfile'
+    ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
       key: Resource.TITLE,
@@ -345,10 +392,9 @@ class Resource extends amplify_core.Model {
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.bool)
     ));
     
-    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.nonQueryField(
-      fieldName: 'createdAt',
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: Resource.CREATEDAT,
       isRequired: false,
-      isReadOnly: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.dateTime)
     ));
     

@@ -1,3 +1,4 @@
+import 'package:amplify_storage_s3/amplify_storage_s3.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
@@ -25,6 +26,7 @@ Future<void> _configureAmplify() async {
   if (!Amplify.isConfigured) {
     await Amplify.addPlugin(AmplifyAuthCognito());
     await Amplify.addPlugin(AmplifyAPI());
+    await Amplify.addPlugin(AmplifyStorageS3());
 
     await Amplify.configure(amplifyconfig);
     safePrint("Amplify configured");

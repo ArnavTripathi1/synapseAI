@@ -1,0 +1,14 @@
+{
+  "resourceName": "synapseS3",
+  "policyUUID": "7d25e160",
+  "bucketName": "synapse48f9eb8fb38b42d78e9b2748294b9b49",
+  "storageAccess": "auth",
+  "guestAccess": [],
+  "authAccess": [
+    "CREATE_AND_UPDATE",
+    "READ",
+    "DELETE"
+  ],
+  "triggerFunction": "NONE",
+  "groupAccess": {}
+}

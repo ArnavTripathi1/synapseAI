@@ -3,9 +3,11 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/services.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_storage_s3/amplify_storage_s3.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
-  final String videoUrl;
+  final String videoUrl; // Can be a YouTube link OR an S3 Key (public/videos/...)
   final String title;
   final String description;
 
@@ -28,6 +30,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   bool _isYouTube = false;
   bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -35,50 +38,86 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _initializePlayer();
   }
 
-  void _initializePlayer() {
-    if (widget.videoUrl.contains('youtube.com') || widget.videoUrl.contains('youtu.be')) {
-      _isYouTube = true;
-      String? videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
-
-      if (videoId != null) {
-        _youtubeController = YoutubePlayerController(
-          initialVideoId: videoId,
-          flags: const YoutubePlayerFlags(
-            autoPlay: true,
-            mute: false,
-            enableCaption: true,
-            forceHD: false,
-          ),
-        );
+  Future<void> _initializePlayer() async {
+    try {
+      // 1. Check if it is YouTube
+      if (widget.videoUrl.contains('youtube.com') || widget.videoUrl.contains('youtu.be')) {
+        _initializeYoutube();
+      } else {
+        // 2. It is an S3 file (either full URL or Key)
+        await _initializeS3Video();
+      }
+    } catch (e) {
+      debugPrint("Video Init Error: $e");
+      if (mounted) {
         setState(() {
           _isLoading = false;
+          _errorMessage = "Could not load video: $e";
         });
       }
-    } else {
-      // Handle S3 / MP4 Files
-      _isYouTube = false;
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    }
+  }
 
-      _videoController!.initialize().then((_) {
-        _chewieController = ChewieController(
-          videoPlayerController: _videoController!,
-          aspectRatio: _videoController!.value.aspectRatio,
+  void _initializeYoutube() {
+    _isYouTube = true;
+    String? videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
+
+    if (videoId != null) {
+      _youtubeController = YoutubePlayerController(
+        initialVideoId: videoId,
+        flags: const YoutubePlayerFlags(
           autoPlay: true,
-          looping: false,
-          errorBuilder: (context, errorMessage) {
-            return Center(
-              child: Text(
-                errorMessage,
-                style: const TextStyle(color: Colors.white),
-              ),
-            );
-          },
-        );
-        setState(() {
-          _isLoading = false;
-        });
+          mute: false,
+          enableCaption: true,
+          forceHD: false,
+        ),
+      );
+      if (mounted) setState(() => _isLoading = false);
+    } else {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = "Invalid YouTube URL";
       });
     }
+  }
+
+  Future<void> _initializeS3Video() async {
+    _isYouTube = false;
+    String finalUrl = widget.videoUrl;
+
+    // A. If it's an S3 Key (not http), fetch the signed URL
+    if (!widget.videoUrl.startsWith('http')) {
+      try {
+        final result = await Amplify.Storage.getUrl(
+          path: StoragePath.fromString(widget.videoUrl),
+          options: const StorageGetUrlOptions(
+            pluginOptions: S3GetUrlPluginOptions(expiresIn: Duration(hours: 1)),
+          ),
+        ).result;
+        finalUrl = result.url.toString();
+      } catch (e) {
+        throw Exception("Failed to get S3 URL: $e");
+      }
+    }
+
+    // B. Initialize Video Player
+    _videoController = VideoPlayerController.networkUrl(Uri.parse(finalUrl));
+
+    await _videoController!.initialize();
+
+    _chewieController = ChewieController(
+      videoPlayerController: _videoController!,
+      aspectRatio: _videoController!.value.aspectRatio,
+      autoPlay: true,
+      looping: false,
+      errorBuilder: (context, errorMessage) {
+        return Center(
+          child: Text(errorMessage, style: const TextStyle(color: Colors.white)),
+        );
+      },
+    );
+
+    if (mounted) setState(() => _isLoading = false);
   }
 
   @override
@@ -86,7 +125,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _youtubeController?.dispose();
     _videoController?.dispose();
     _chewieController?.dispose();
-    // Force portrait when leaving the screen
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
   }
@@ -100,69 +138,51 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       );
     }
 
-    // 1. YOUTUBE LAYOUT (With Fullscreen Builder)
-    if (_isYouTube) {
+    if (_errorMessage != null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(backgroundColor: Colors.transparent, iconTheme: const IconThemeData(color: Colors.white)),
+        body: Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.white))),
+      );
+    }
+
+    // 1. YOUTUBE LAYOUT
+    if (_isYouTube && _youtubeController != null) {
       return YoutubePlayerBuilder(
         player: YoutubePlayer(
           controller: _youtubeController!,
           showVideoProgressIndicator: true,
           progressIndicatorColor: Colors.teal,
-          onReady: () {
-            // Optional: Actions when player is ready
-          },
         ),
         builder: (context, player) {
-          return Scaffold(
-            backgroundColor: Colors.black,
-            body: SafeArea(
-              child: Column(
-                children: [
-                  // Video Area
-                  Expanded(
-                    flex: 3,
-                    child: Stack(
-                      children: [
-                        // The player provided by the builder
-                        Center(child: player),
-                        // Back Button Overlay (Visible in Portrait)
-                        Positioned(
-                          top: 10,
-                          left: 10,
-                          child: IconButton(
-                            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Details Area
-                  Expanded(
-                    flex: 5,
-                    child: _buildVideoDescription(),
-                  ),
-                ],
-              ),
-            ),
-          );
+          return _buildScaffoldLayout(playerContent: player);
         },
       );
     }
 
-    // 2. STANDARD LAYOUT (For Chewie/S3/MP4)
+    // 2. STANDARD LAYOUT (Chewie)
+    return _buildScaffoldLayout(
+      playerContent: _chewieController != null
+          ? Chewie(controller: _chewieController!)
+          : const Center(child: CircularProgressIndicator(color: Colors.white)),
+    );
+  }
+
+  // Unified Scaffold to remove code duplication
+  Widget _buildScaffoldLayout({required Widget playerContent}) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
           children: [
+            // Video Area (Flexible)
             Expanded(
               flex: 3,
               child: Stack(
                 children: [
-                  Center(child: Chewie(controller: _chewieController!)),
+                  Center(child: playerContent),
                   Positioned(
-                    top: 10,
-                    left: 10,
+                    top: 10, left: 10,
                     child: IconButton(
                       icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
                       onPressed: () => Navigator.pop(context),
@@ -171,6 +191,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 ],
               ),
             ),
+            // Details Area
             Expanded(
               flex: 5,
               child: _buildVideoDescription(),
@@ -181,7 +202,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     );
   }
 
-  // Extracted widget to avoid duplication between the two layouts
   Widget _buildVideoDescription() {
     return Container(
       width: double.infinity,
@@ -194,71 +214,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)),
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)),
+              ),
             ),
             Text(
               widget.title,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.remove_red_eye, size: 16, color: Colors.grey[500]),
+                Icon(Icons.person, size: 16, color: Colors.grey[500]),
                 const SizedBox(width: 4),
-                Text("1.2k views", style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                const SizedBox(width: 16),
-                Icon(Icons.favorite, size: 16, color: Colors.pink[400]),
-                const SizedBox(width: 4),
-                Text("98% helpful", style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                Text("Counselor Upload", style: TextStyle(color: Colors.grey[500], fontSize: 12)),
               ],
             ),
             const SizedBox(height: 24),
-            const Text(
-              "Description",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
+            const Text("Description", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
-            Text(
-              widget.description,
-              style: const TextStyle(color: Colors.black54, height: 1.5),
-            ),
-            const SizedBox(height: 30),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.bookmark_border),
-                    label: const Text("Save"),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.share, color: Colors.white),
-                    label: const Text("Share", style: TextStyle(color: Colors.white)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ],
-            )
+            Text(widget.description, style: const TextStyle(color: Colors.black54, height: 1.5)),
           ],
         ),
       ),
